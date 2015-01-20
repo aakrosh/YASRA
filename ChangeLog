@@ -1,0 +1,5 @@
+2010-02-27 Aakrosh Ratan ratan@bx.psu.edu
+
+* contig.c:625 The slice from the reference to be aligned to a read should be
+  from the beginning of the first interval to the end of the last, not the first
+  of the last

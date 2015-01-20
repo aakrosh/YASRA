@@ -1,0 +1,28 @@
+#!/usr/bin/python
+import sys
+import commands
+
+W=1
+X=2
+max = 4294967296
+
+if __name__ == "__main__":
+	contigs = max
+	reads = 0
+	while 1:
+		(status, output) = commands.getstatusoutput("make stepx W=%d X=%d" % (W,X))
+		print output
+		(s1, o1) = commands.getstatusoutput("cat Assembly%d | grep '>' | wc -l" % X)
+		print "Number of Contigs: %d" % int(o1)
+		(s2, o2) = commands.getstatusoutput("cat hits_template%d.fa | grep '>' | wc -l "% X)
+		(s3, o3) = commands.getstatusoutput("cat %s | wc -l" % sys.argv[1])
+		(s4, o4) = commands.getstatusoutput("cat %s | wc -l" % sys.argv[2])
+		print "%s reads are going to be used(%s)" % (o2,reads)
+		if ((int(o1) > int(contigs)) or ((int(o2)-int(o3)-int(o4)) <= reads)):
+			W=X-1
+			commands.getstatusoutput("cp template%d template" % W)
+			break
+		contigs = o1
+		reads = int(o2)-int(o3)-int(o4)
+		W=W+1
+		X=X+1
