@@ -1,10 +1,10 @@
 YASRA
 ======
-Reference based assembler
+Reference based assembler (Yet Another Short Read Assembler)
 
 ## REQUIREMENTS
 YASRA uses LASTZ to map the reads on to a reference. LASTZ can be freely
-downloaded from http://www.bx.psu.edu/miller_lab/ YASRA should work on any
+downloaded from http://www.bx.psu.edu/miller_lab/. YASRA should work on any
 standard 64 bit Linux environment with gcc, python and gnuplot.
 
 ## INSTALLATION
