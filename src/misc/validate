@@ -1,0 +1,128 @@
+#!/usr/bin/env python
+
+"""
+Given lastz alignments from stdin, generate details about the differences in the
+two sequences 
+"""
+
+from sys import argv, stderr, exit, stdin
+from getopt import getopt, GetoptError
+
+__author__ = "Aakrosh Ratan"
+__email__  = "ratan@bx.psu.edu"
+
+# do we want the debug information to be printed?
+debug_flag = False
+
+def main(targetname, queryname, printdiffs):
+    AA = AC = AG = AT = AN = 0
+    CA = CC = CG = CT = CN = 0
+    GA = GC = GG = GT = GN = 0
+    TA = TC = TG = TT = TN = 0
+    NA = NC = NG = NT = NN = 0
+
+    insertions = 0
+    deletions  = 0
+
+    for line in stdin:
+        if line.startswith("#"): continue
+
+        tokens = line.split()
+
+        name1   = tokens[0]      
+        zstart1 = int(tokens[1])
+        end1    = int(tokens[2])
+        text1   = tokens[3].upper()
+
+        name2   = tokens[4]
+        zstart2 = int(tokens[5])
+        end2    = int(tokens[6])
+        text2   = tokens[7].upper()
+
+        s1 = zstart1
+        s2 = zstart2
+
+        for a,b in zip(text1,text2):
+            if   a == "A" and b == "A": AA += 1
+            elif a == "A" and b == "C": AC += 1       
+            elif a == "A" and b == "G": AG += 1       
+            elif a == "A" and b == "T": AT += 1       
+            elif a == "A" and b == "N": AN += 1       
+            elif a == "C" and b == "A": CA += 1       
+            elif a == "C" and b == "C": CC += 1       
+            elif a == "C" and b == "G": CG += 1       
+            elif a == "C" and b == "T": CT += 1       
+            elif a == "C" and b == "N": CN += 1       
+            elif a == "G" and b == "A": GA += 1       
+            elif a == "G" and b == "C": GC += 1       
+            elif a == "G" and b == "G": GG += 1       
+            elif a == "G" and b == "T": GT += 1       
+            elif a == "G" and b == "N": GN += 1       
+            elif a == "T" and b == "A": TA += 1       
+            elif a == "T" and b == "C": TC += 1       
+            elif a == "T" and b == "G": TG += 1       
+            elif a == "T" and b == "T": TT += 1       
+            elif a == "T" and b == "N": TN += 1       
+            elif a == "N" and b == "A": NA += 1       
+            elif a == "N" and b == "C": NC += 1       
+            elif a == "N" and b == "G": NG += 1       
+            elif a == "N" and b == "T": NT += 1       
+            elif a == "N" and b == "N": NN += 1 
+            elif a == "-" and b != "-": insertions += 1
+            elif a != "-" and b == "-": deletions  += 1
+            else: print >> stderr, "unknown nuc: %s %s" % (a,b)
+
+            if printdiffs and a != b:
+                print "%s %d %s %s %d %s" % (name1, s1, a, name2, s2, b)
+            
+            if a != "=": s1 += 1
+            if b != "=": s2 += 1
+
+    print "Target in rows, Query in columns"
+    print "\tA\tC\tG\tT\tN"
+    print "A\t%d\t%d\t%d\t%d\t%d" % (AA,AC,AG,AT,AN)
+    print "C\t%d\t%d\t%d\t%d\t%d" % (CA,CC,CG,CT,CN)
+    print "G\t%d\t%d\t%d\t%d\t%d" % (GA,GC,GG,GT,GN)
+    print "T\t%d\t%d\t%d\t%d\t%d" % (TA,TC,TG,TT,TN)
+    print "N\t%d\t%d\t%d\t%d\t%d" % (NA,NC,NG,NT,NN)
+    print ""
+    print "Substitutions: %d" % (AC+AG+AT+CA+CG+CT+GA+GC+GT+TA+TC+TG)
+    print "Insertions: %d" % insertions
+    print "Deletions : %d" % deletions
+
+def usage():
+    f = stderr
+    print >> f, "usage:"
+    print >> f, "validate [options] seq1.fa seq2.fa < align.txt"
+    print >> f, "where the options are:"
+    print >> f, "-h,--help : print usage and quit"
+    print >> f, "-d,--debug: print debug information"
+    print >> f, "-p,--print: print the differences"
+    print >> f, "where align.txt is the result of aligning seq2.fa to seq1.fa"
+
+if __name__ == "__main__":
+    try:
+        opts, args = getopt(argv[1:], "hdp",["help", "debug", "print"])
+    except GetoptError, err:
+        print str(err)
+        usage()
+        exit(2) 
+
+    printdiffs = False
+
+    for o, a in opts:
+        if o in ("-h", "--help"):
+            usage()
+            exit()
+        elif o in ("-d", "--debug"):
+            debug_flag = True
+        elif o in ("-p", "--print"):
+            printdiffs = True
+        else:
+            assert False, "unhandled option"
+
+    if len(args) != 2:
+        usage()
+        exit(3)
+
+    main(args[0], args[1], printdiffs)

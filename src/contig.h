@@ -1,183 +1,152 @@
 #ifndef CONTIG_H
 #define CONTIG_H
 
-#include "slist.h"
-#include "seq.h"
+#include <math.h>
 
-/*extend the contig by this number of bases in one go*/
-#define ALLOC 5000
+#include "utilities.h"
+#include "sequences.h"
+#include "slinklist.h"
+#include "hashtable.h"
 
-/*when printing a contig we need so many rows. The number is incremented by the
- * same amount*/
-#define NUM_ROWS 5
-
-/*default value of quality of a base*/
-#define QUALITY 20
-
-/* scores */
+/* the match, mismatch, gapopen and gapextend scores */
 #define MATCH 20
 #define MISMATCH -20
-#define GAPMISMATCH -10
+#define GAPOPEN 80
+#define GAPEXTEND 20
 
-/*gap scores and read length for normal 454 reads*/
-#define GAP_OPEN 80
-#define GAP_EXTEND 20
-#define MAX_SEQ_LENGTH 300
+/* the threshold score for alignment */
+#define THRESHOLD (10 * MATCH)
 
+/* the weights of the two scoring functions used for realignment */
+/* 1 only if base is not equal to consensus */
+#define WEIGHTSCORE1 0.5
+/* score for aligning a symbol x of S with a column is equal to the fraction of
+ * symbols not equal to x*/
+#define WEIGHTSCORE2 0.5
 
-/*the same for the solexa reads*/
-#define SOLEXA_GAP_OPEN 80
-#define SOLEXA_GAP_EXTEND 20
-#define SOLEXA_MAX_SEQ_LENGTH 50
-
-/*the threshold values for the overlaps*/
-#define OVERLAP_THRESHOLD 80
-#define SOLEXA_CONTAINED_THRESHOLD 100
-#define CONTAINED_THRESHOLD(A) (((A)> 100) ? (300) : (200))
-
-/*if the alignments vary more than this, we penalize it*/
-#define FUZZ 10 
-
-/*this would define the gap between consecutive reads in the Realigner format*/
-#define BANDWIDTH 17
-
-/*size of the dp matrix (multiple of the max_read_length)*/
-#define DP_SIZE 2
-
-typedef struct contig
+typedef struct element_st
 {
-	struct contig* next;		/*the next contig*/
-	struct read* reads;			/*the reads in this contig*/
-	struct column* columns;		/*the positions on this contig*/
-	struct column* last;		/*the last column for this contig, used*/
-	int bt;						/*begin position of the hit on the template*/
-	int et;						/*end position of the hit on the template*/
-	int count;					/*number of bases in the contig*/
-	int alloced;				/*number of bases allocated for */
-}CONTIG;
+    struct element_st* next;
+    struct element_st* prev;
+    uchar base;
+    uchar qual;
+}element;
 
-typedef struct read
+typedef struct seqread_st
 {
-	struct read* next;			/*the next read in the contig*/
-	char* header;				/*the header in the contig*/
-	bool complement;			/*is the read complemented*/
-	struct column* scolumn;		/*the start column of the aligned read*/
-	struct element* unused;		/*trimmed part of the read on the left side*/
-	struct element* trimmed;	/*trimmed part of the read on the right side*/
-	struct element* head;		/*the first aligned character in the read*/
-	int row;					/*the row in the realigner format*/
-	/*row is also used as the weight (overlap score) when we are aligning
-	 * the contained reads. The value of row is changed to -1 (which is the
-	 * default) after that, because a lot of later routines (print_aligner) rely
-	 * on that and have checks in place  to make sure that this is true*/
-}READ;
+    /* name for this read */
+    char* name;
 
-#define READ_HEAD(r) 	((r)->header)
+    /* where does this align on the reference */
+    uint c;       // chromosome 
+    uint s;       // start of the alignment
+    uint e;       // end of the alignment
+    bool complemented;
+    
+    /* the actual elements of this read */
+    element* lunused;
+    element* clear;
+    element* runused;
 
-typedef struct column
+    /* where does this read lie on the assembled contig */
+    struct contig_st* contig;
+    struct column_st* start;
+    struct column_st* end;
+}seqread;
+
+typedef struct contig_st
 {
-	struct column* next;		/*the next column in the contig*/
-	struct column* prev;		/*the prev column in the contig*/
-	struct element* head;		/*the first element in the column*/
-	int counts[6];				/*the counts of the various bases*/
-	int index;					/*the index for each column*/
-}COLUMN;
+    struct contig_st* next;
+    struct column_st* columns;
 
-typedef struct element
+    uint index;
+    
+    uint numreads;
+    seqread** reads;  
+
+    /* where does this contig lie on the reference */
+    uint c;
+    uint s;
+    uint e;
+
+    /* this would be set if this contig was marked as "BAD" */
+    bool badcontig;
+}contig;
+
+typedef struct column_st
 {
-	struct element* next;		/*the next element in the same column*/
-	struct element* adjacent;	/*the next element of the same read*/
-	char el;					/*the base at this position*/
-	char qual;					/*the quality value at this position*/
-	int* row;					/*which row does this element belong in*/
-}ELEMENT;
+    struct column_st* next;
+    struct column_st* prev;
+    
+    uint numelements;
+    element** elements;
+}column;
 
-typedef struct interval
+typedef struct assembly_st
 {
-	struct interval* next;		/*the next interval in the list*/
-	int bt;						/*beginning of the hit on the template */
-	int et;						/*end of the hit on the template */
-	struct column* start;		/*the corresponding placement on the contig*/
-	struct column* end;			/*the last column of alignment of interval */
-	struct contig* contig;		/*which contig do I belong to*/
-}INTERVAL;
+    contig* contigs;
+}assembly;
 
-/*initialise the scoring matrices and some of the constants*/
-void initialize_scores(const int open, const int extend, const int length);
+/* create a new read */
+seqread* new_read(char* sequence,
+                  char* quality,
+                  const int slen,
+                  const char* const name,
+                  const bool rc, 
+                  const uint c1,
+                  const uint s1, const uint e1,
+                  const uint s2, const uint e2,
+                  const bool doorient,
+                  const bool doconvert);
 
-/*return a new read structure. The default quality value is 20.*/
-READ* new_read(const SEQ* const sp, const int* const quals);
+/* create a new contig from this read */
+contig* new_contig(assembly* a, seqread* const r);
 
-/*return what the contained threshold should be*/
-int contained_threshold(const int length);
+/* align the two reads and return the score */
+float get_read_alignment_score(const seqread* const r1, 
+                               const seqread* const r2,
+                               int* const pmax1,
+                               int* const pmax2,
+                               int* const pdiffs);
+/* create a new assembly */
+assembly* new_assembly();
 
-/*take two sequences, align them and return the maximum score*/
-int score_reads(const READ* const A, const READ* const B, const bool suffix, int*** const pV, int** const pF, int*** const pI);
+/* align the reads with each other in context of this assembly */
+void align_nodes(assembly* assmbl, 
+                 seqread* const r1, 
+                 column* r1start,
+                 seqread* const r2,
+                 const int weight);
 
-/*take a read and an column from a contig and return the score*/
-int score_contig_read(const READ* const seq, const COLUMN* const column, const int len1, int*** const pV, int** const pF, int*** const pI, const bool contained);
+/* realign the assembly */
+void realign_assembly(assembly* const assmbl,
+                      const bool realignonce);
 
-/*take a read and an column from a contig and return the scores for aligning the
- * right end of the contig and the beginning of the read*/
-int score_contig_ends(const COLUMN* const column, const int len1, const READ* const seq, const int len2, int*** const pV, int** const pF, int*** const pI, const bool contained, int* const max_i, int* const max_j);
+/* mark the contigs that are "BAD" i.e. the ones I should not bother printing
+ * out to the user */
+void mark_bad_contigs(assembly* const assmbl,
+                      const int minavgcov);
 
-/*make a new contig of this size*/
-CONTIG* construct_contig(const int size);
+/* print the details of this assembly */
+void print_assembly(const assembly* const a, 
+                    FILE* const fp, 
+                    const bool includegaps,
+                    hashtable* const map);
 
-/* allocate a new contig */
-CONTIG* new_contig();
+/* print the assembly in the ACE format*/
+void print_assembly_ace(const assembly* const assmbl, 
+                        FILE* const acefile);
 
-/*free the contigs*/
-void free_contigs(CONTIG** pcontigs);
+/* print the assembly in the SAM format */
+void print_assembly_sam(const assembly* const assmbl,
+                        FILE* const samfile,
+                        hashtable* const map);
 
-/*free the resources used by the intervals*/
-void free_intervals(INTERVAL** pintervals);
+/* free the resources from this assembly */
+void free_assembly(assembly** pa);
 
-/* just add the whole READ to the contig. This is because the READ is the first 
- * read to the contig */
-void add_contig(CONTIG* const contig, READ* const node, const int bt, const int et);
-
-/*align the profile with the given sequence */
-void align_read(CONTIG* const contig, READ* seq, INTERVAL** const pintervals,  FILE* const rf, int*** const pV, int** const pF, int*** const pI);
-
-/*align the contained read with the existing contig*/
-int align_contained_read(CONTIG* const contig, READ* const seq, const INTERVAL* const interval);
-
-/*align the contig and the read. just a wrapper around the align routine*/
-int align_special(CONTIG* const contig, COLUMN* const cstart, COLUMN* const cend, READ* const seq, const int rstart, const int rend, int*** const pV, int** const pF, int*** const pI);
-
-/* print out the contig in a form acceptable to Realigner. This routine also
- * sets the row variable of all the reads. That is useful when and
- * if we print the ace file. (Since we want this to work with the realigner)*/
-void print_aligner_contig(CONTIG* const contig);
-
-/*Sort the reads with each contig, based on row and position*/
-void sort_reads(CONTIG* const contigs);
-
-/*This sets the indices of the columns once for all the contigs so that we 
- * dont have to use slindex for each read when we sort them*/
-void assign_indexes(CONTIG* const contigs);
-
-/*print out the partial ace file*/
-void print_ace(FILE* const af, const CONTIG* const contigs);
-
-/*free the resources used by the set of intervals*/
-void free_intervals(INTERVAL** pintervals);
-
-/*free the resources held by a read*/
-void free_read(READ** pread);
-
-/*free the resources used by a list of contigs*/
-void free_contigs(CONTIG** pcontigs);
-
-/***********debugging routines***************/
-/*print the read*/
-void print_read(const READ* const read);
-
-/*print a column*/
-void print_column(const COLUMN* const column);
-
-/*print the score matrix*/
-void print_scores(int** const V, const int len1, const int len2);
+/* free all the static variables in this file. Primarily I dont want to see any
+ * more "still reachable" records in valgrind */
+void free_alignment_resources();
 
 #endif

@@ -1,329 +1,207 @@
 YASRA
-======
-Reference based assembler (Yet Another Short Read Assembler)
+=====
 
 ## REQUIREMENTS
-YASRA uses LASTZ to map the reads on to a reference. LASTZ can be freely
-downloaded from http://www.bx.psu.edu/miller_lab/. YASRA should work on any
-standard 64 bit Linux environment with gcc, python and gnuplot.
+YASRA should work on any standard 64 bit Linux environment with gcc and python.
+However we have tested the compilation on the following platforms (output of
+gcc --version and uname -a):
+
+a) gcc (GCC) 4.1.2 20080704 (Red Hat 4.1.2-50)
+   Linux 2.6.18-164.el5 #1 SMP x86_64 GNU/Linux
+
+YASRA uses LASTZ (http://bx.psu.edu/miller_lab for released version and
+http://www.bx.psu.edu/~rsharris/lastz/newer for newer version) for aligning the
+sequences to the reference genome. Please install LASTZ (the newest version on
+http://www.bx.psu.edu/~rsharris/lastz/newer) and add the LASTZ binary in your
+executable/binary search path before installing YASRA. 
+
+## SUMMARY
+YASRA (Yet Another Short Read Assembler) performs comparative assembly of short
+reads using a reference genome, which can differ substantially from the genome
+being sequenced. Mapping reads to reference genomes makes use of LASTZ (Harris
+et al), a pairwise sequence aligner compatible with BLASTZ. Special
+scoring sets were derived to improve the performance, both in runtime and
+quality for 454 and Illumina sequence reads. 
 
 ## INSTALLATION
-Please install LASTZ and ensure that it is included in your PATH. All the
-remaining modules for YASRA are included in this directory. Simply follow the
-instructions in the INSTALL file and you should be able to install the binaries
-in a folder of your choice
+The programs can be compiled by following the following recipe:
 
-## NOTES
-### Comparative Assembler Pipeline:
-The requirements of this module are the following:
-1) Given a set of hits(the reads and the positions of the hit on the template),
-this assembler must be able to assemble those reads to form the contigs.
-2) The assembler output must be displayable in the standard ACE format as well
-as a format acceptable to Realigner, since that will be a part of the pipeline. 
-3) The assembler should be able to handle quality values, even though there
-might not be much that can be done with them as of now. Hence, the assembler
-must be able to read the quality value files, and the quality values must be a
-part of the data structure.
-4) The assembler should work for both 454 and Solexa reads and the decision
-whether it is solexa or 454 should be made with a command line switch on
-runtime.
+  % configure --prefix=/usr/local (or whatever installation path you prefer)
+  % make
+  % make install
+
+This complies all the components of the pipeline and puts the binaries in the
+folder $prefix/bin.  For more in depth instructions, consult the INSTALL file.
+
+Please add the $prefix/bin folder to your executable/binary search path to
+complete the installation.
+
+## DESCRIPTION
+Our proposed pipeline proceeds in several steps. The first step involves 
+aligning the reads to a distant template followed by trimming of the reads at 
+the ends. Subsequently the reads are assembled to form the consensus sequence.
+This process can be repeated to close some of the gaps in the assembled
+sequence. The last iteration is followed by an error-detection module, which
+aims to detect areas with low coverage or with possible assembly errors. 
+
+## READ NAMES
+Up till YASRA version 2.31 only the first space delimited token (in the read
+header) was considered as the unique read identifier. For example if a 454 read
+had the header:
+
+>GAOCPZU01A7HGZ length=115 xy=0378_0673 region=1 run=R_2010_01_14_15_16_37_
+
+I considered GAOCPZU01A7HGZ as the unique read identifier. 
+
+Similarly, for an Illumina read downloaded from the Short Read Archive with the
+header:
+
+@HWI-EAS313:7:1:8:1009#0/1 length=76
+
+HWI-EAS313:7:1:8:1009#0/1 was considered to be the unique read identifier. 
+But recent Illumina runs use read headers such as 
+
+@HWI-ST978:170:D1032ACXX:5:1101:1461:2178 1:N:0:CGGAAT
+
+where the first token is not unique. In order to handle such cases all tokens in
+Illumina reads are now considered in the read names from YASRA version 2.32
+onwards.  This behavor is turned on in the Makefile in the line 116 of the test
+dataset:
+
+names=full
+
+For the 454 datasets, I still consider only the first token as the read
+identifier. The same behavior (as Illumina, where all tokens are considered) can
+be  turned on for 454  sequences as well, by changing line 100 in the Makefile
+from
+
+names=darkspace
+
+to
+
+names=full
  
-### ACE Format
-The .ACE format is produced by phrap as well as by most other assemblers (including Arachne, TIGR Assembler, CAP, etc.)
-
-Example:
-
-CO 1 30502 510 273 U
-CCTCTCC*GTAGAGTTCAACCGAAGCCGGTAGAGTTTTATCACCCCTCCC
-
-BQ
- 20 20 20 20 20 20 20 20 20 20 20 20 20
-
- AF TBEOG48.y1 C 1
-
- BS 1 137 TBEOG48.y1
-
- RD TBEOG48.y1 619 0 0
- CCTCTCC*GTAGAGTTCAACCGAAGCCGGTAGAGTTTTATCACCCCTCCC
-
- QA 1 619 1 619
-
-Contig identifiers (starting with CO) list the IDs  (1 in the example),
-the number of bases (30502), number of reads (510), and number of "base
-segments" (273) as well as whether the contigs is in the forward orientation
-(Uncomplemented) or reversed (Complemented).  In general, the output of an
-assembler has all contigs listed as "U".
-
-The consensus sequence is padded, the gaps being represented as *s
-instead of dashes, and follows immediately after the CO line.
-Consensus quality values are provided for the bases alone, the gaps not 
-being represented. These quality values, in phred-like format follow
-immediately after the BQ line. 
-
-The AF lines (one per aligned read) contain information of
-whether the read is complemented (C) or not (U) followed by a 1-based offset
-in the consensus sequence.  Note that the offset refers to the beginning of
-the entire read in the alignment, not just the clear range.  Thus the read
-acaggATTGA will have an offset of 1 even though the consensus truly starts at
-position 6.
-
-The BS lines indicate which read was used to calculate the consensus 
-between the specified coordinates.  These lines can, in general, be ignored 
-as they are an artifact of the algorithms used to compute the consensus 
-sequence.
-
-The sequence of each read is explicitly provided after each RD line.  The 
-sequence is padded with *s and is already complemented if necessary.
-The QA line following each read contains two 1-based ranges. The second 
-range represents the clear range of the read, with respect to the read 
-sequence (padded and potentially complemented) as provided in the RD record.
-
-### Design of the data structures
-
-The basic design of the stuff used in the assembler is in contig.h.
-A 'contig' refers to an assembled contig by the assembler. The 'next' member of
-the contig refers to the next contig in the assembly list.
-
-Contig: is formed of columns, which are in a list.
-
-```
-------------------->
-
-.-----------.-----------.-----------.----------.----------.----------.
-|    A      |     C     |     C     |    G     |    G     |     A    | Read 1
-|    A      |     C     |     C     |    G     |    G     |----------' Read 2
-|    A      |     C     |     C     |    G     |    G     |	           Read 3
-|    A      |     C     |     C     |    G     |    G     |            Read 4
-|    A      |     C     |     C     |    G     |    G     |              |
-|    A      |     C     |     C     |    G     |    G     |              |
-|    A      |     C     |     C     |    G     |    G     |              |
-|    A      |     C     |     C     |    G     |    G     |
-|    A      |     C     |     C     |    G     |    G     |
-|    A      |     C     |     C     |    G     |    G     |
-|    C      |     C     |     C     '----------'----------'
-|    C      |     C     |     C     |
-|    C      |     G     |     C     |
-|    C      |     C     |     C     |
-'-----------'-----------'-----------'
-```
-
-Each base in a column is called an element.
-
-### Deletions in the target compared to the reference
-If the deletion in the target is less than the length of a read, it is taken
-care of by the assembler. The trimmer assigns it a long mapped length on the
-reference, which makes it a non-contained read, leading it to bridge the gap.
-However if the deletion in the target is higher than the length of a read then
-this cannot be bridged in a single iteration. Hence it  would lead to a break in
-the contigs.
-
-### Insertion in the target compared to the reference
-Similarly if the insertion in  the target genome is smaller than the length of a
-read, then the assembler is able to bridge that area. However if the length of
-the read is greater than a read, then again, this cannot be bridged with just
-one iteration.
-
-### LAV format
-The details of the lav format can be found in the LASTZ documentation.
 
 ## TEST-DATASET
-Some additional tools are provided with the pipeline in tools.mk. They are
-simple awk commands that can be helpful in looking at different aspects of the
-assembly. 
-
 A sample toy dataset can be found in the "test_data" sub-directory. The reads
-are a sample of 10X coverage from the sequence correct.fa. They were generated
-using ReadSim (http://www-ab.informatik.uni-tuebingen.de/software/readsim/) with
-a mean length of 100 bp. The directory contains a Makefile, which demonstrates
-the use of the pipeline in steps, for a reference which is approximately 95.6%
-similar to the correct sequence. That Makefile discusses one iteration of the
-assembler on the reference to generate contigs. It also illustrates the
-conversion of the ACE file into a bank which can then be viewed using Hawkeye.
+(454.fa) are from a Black rhinoceros sample. We use the non VNTR region of the Indian rhinoceros to construct the consensus sequence of the mtDNA of the Black
+rhinoceros. Please take a look at the Makefile in the directory and use it to
+assemble the mtDNA. 
 
-A complete Makefile which uses the iterative mode of the pipeline can be made 
-as shown at the end of this document. 
+The Makefile can be modified to suit your needs for a particular project. In
+summary YASRA has two modes:
+a) single_step : where the reads are aligned to the reference sequence and a
+   consensus sequence is constructed out of that. This is the preffered method
+   that should be used in most cases.
+b) recursive : where the reads are aligned to the reference and a consensus
+   sequence is generated. That sequence is then used as a reference and this is
+   continued till we cannot improve the assembly any further. Please use this
+   mode with caution. I would always recommend using the single_step mode before
+   you play around with the recursive mode for YASRA.
+
+For every project, create a copy of the Makefile in the test_data directory and
+modify the following variables in the Makefile:
+
+C        : this should point to the directory with all the binaries for YASRA.
+READS    : this should point to the fasta file with the reads for the project.
+TEMPLATE : this should point to the fasta file with the reference genome.
+ORIENT   : linear/circular depending on whether the reference genome is linear 
+           or circular. For example mtDNA is circular.
+TYPE     : 454/solexa depending on whether the reads were sequenced using 454 
+           or Solexa/Illumina.
+PID      : for 454 reads this could be
+                'same'       : about 98% identity between target & reference
+                'high'       : about 95% identity between target & reference
+                'medium      : about 90% identity between target & reference
+                'low'        : about 85% identity between target & reference
+                'verylow'    : about 75% identity between target & reference
+                'desperate'  : realy low identity (rather slow)
+           for Solexa/Illumina reads this could be 
+                'same'        : about 95% identity between target & reference
+                'medium'      : about 85% identity between target & reference
+                'desperate'   : low scores (rather slow)
+ 
+The user can override these options from the command-line. For example if the
+Makefile had PID=same, and an user wanted to attempt to run the pipeline with
+PID=low, then they could modify the Makefile or just type on the command line:
+
+    make PID=low
+
+Please ensure that you have the latest version of LASTZ installed. You can check
+the version installed by using the following command : 
+
+    lastz --version
+
+
+Some of the parameters can only be changed in the Makefile. The defaults should
+work for most cases, but users might want to make these changes for their
+purpose for specific projects.
+
+These are the options for the module "best_hit" which selects one alignment per
+qualifying read. The user should use only one of the following options:
+
+-u : Ignore reads with multiple alignments. This is the default behavior in
+     the Makefile with the test dataset.
+-s : Choose the place with the highest number of matches. If two alignments 
+     have equal number of matches, then choose one of them randomly.
+-b : Choose the best alignment only if it has x% (x is user-specified, e.g
+     -b 3 for x=3) more matches than the second best hit. (We use x=3 
+     internally for whole genome analyses).
+ 
+In cases where the the assembly does not benefit from the iterative process (if
+that option was chosen), it exists with the message
 
 ```
-# Put the reads file as 454.fa, the reference as reference.fa and run this
-# makefile as
-#	make TYPE=454 ORIENT=linear PID=same
-#	
-# Options for TYPE are 454,solexa
-# Options for ORIENT are linear,circular
-# Options for PID are same,high,medium,low,verylow and denote percent identity
-#     to the reference. Same 98%, High 95% and so on.
-
-#this needs to be changed to point to the directory with the binaries.
-C=
-
-#this is the length of the ids of the reads. 
-WL=`cat 454.fa | grep '>' | awk '{print length($$1)}' | sort -nr | head -1`
-
-#is this 454 or solexa data
-TYPE=454
-
-#is this a circular or a linear genome
-ORIENT=linear
-
-#maximum length of a read
-MAX=`cat 454.fa | awk '{if(substr($$0,1,1) == ">"){if(a>max){max=a}; a=0} else{a = a+length($$0)}}; END{print max}'`
-
-# Q gives parameters for finding weak matches to a rather distant species
-# R gives parameters for finding high-identity matches to endogenous DNA
-
-ifeq ($(TYPE), 454)
-	MAKE_TEMPLATE=min=150
-	ifeq ($(PID),same)
-		Q=98
-	endif
-	ifeq ($(PID),high)
-		Q=95
-	endif
-	ifeq ($(PID),medium)
-		Q=90
-	endif
-	ifeq ($(PID), low)
-		Q=85
-	endif
-	ifeq ($(PID), verylow)
-		Q=75
-	endif
-	R=98 
-endif
-
-ifeq ($(TYPE), solexa)
-	MAKE_TEMPLATE=N=100 min=30
-	SOLEXA_INSERT=N=100
-	SOLEXA=-solexa
-	ifeq ($(PID),same)
-		Q=95short
-	endif
-	ifeq ($(PID),high)
-		Q=95short 
-	endif
-	ifeq ($(PID),medium)
-		Q=85short
-	endif
-	ifeq ($(PID), low)
-		Q=85short
-	endif
-	ifeq ($(PID), verylow)
-		Q=85short
-	endif
-	R=95short 
-endif
-
-ifeq ($(ORIENT), circular)
-	CIRCULAR=-circular
-endif
-
-TEMPLATE=reference.fa
-COMPARE=$(TEMPLATE)
-
-CON_INFO=info.txt
-REJECT=hits_reject.fa
-REJ=Rejects.txt
-REP=repeats.txt
-HITS=hits_final.fa
-
-all:step1 step2 step3 step4 step5
-
-single_step:
-	make final_assembly T=$(TEMPLATE) V=60 P="$Q" I=80 S="-sig=1"
-	rm MAlign ReMAlign
-
-transcriptome:
-	$C/addX genes | grep -v '>' > $(TEMPLATE)
-	make final_assembly T=$(TEMPLATE) V=60 P="$Q" I=60 S="-sig=1"
-	rm MAlign ReMAlign
-
-step1 :
-	#Assemble on the original template:
-	make assemble_hits T=$(TEMPLATE) V=60 I=70 P="$Q" N=1
-
-step2:
-	touch fake.txt 
-	$C/finisher $(REJ) $(REP)
-	@rm Assembly* hits* template[0-9]* $(REP) fake.txt
-
-step3:
-	#Determine difference between reads and assembly:
-	lastz template 454.fa --yasra$R | \
-	$C/lav_processor | \
-	$C/template_hits template 454.fa cov=70 pct=90 stats \
-	   discard=$(REJECT) > read_hits
-	make plot H=read_hits
-
-step4:
-	#Trim Assembly:
-	if [ -s plot_rejects.eps ]; then \
-		mv plot_rejects.eps old_plot_rejects.eps; \
-	fi
-	$C/trim_assembly template read_hits $(REJECT) min=1 > AssemblyX
-	$C/make_template AssemblyX noends $(MAKE_TEMPLATE) info=$(CON_INFO) \
-		> ftemplate
-	make assemble_hits T=ftemplate V=70 I=90 P="$R" N=Y
-	$C/make_template AssemblyY noends $(MAKE_TEMPLATE) info=$(CON_INFO) \
-		> final_template
-	lastz final_template 454.fa --yasra$R | \
-	$C/lav_processor | \
-	$C/template_hits final_template 454.fa cov=70 pct=90 stats \
-	   discard=$(REJECT) > read_hits
-	make plot H=read_hits
-	@rm read_hits AssemblyX AssemblyY ftemplate Assembly_ftemplate \
-		hits_ftemplate.fa
-
-step5:
-	make final_assembly T=final_template V=70 P="$R" I=90 S="-sig=1"
-	@rm final_template template MAlign ReMAlign
-
-final_assembly:
-	time lastz $T 454.fa --yasra$P | \
-	time $C/lav_processor $S  | \
-	time $C/template_hits $T 454.fa cov=$V pct=$I \
-		discard=$(REJECT)  > $(HITS)
-	cat $(HITS) | grep '>Hit' | awk '{print $$4, $$1}' | sort -n |  \
-		uniq -w $(WL) -D | awk '{print $$2}' > $(REP)
-	time $C/assembler hits_final.fa -ace=Contigs.ace -rejects=$(REJ) \
-		-repeats=$(REP) $(SOLEXA) -max_length=$(MAX) > MAlign
-	time $C/realigner -ace=Contigs.ace < MAlign > ReMAlign
-	time $C/consense -ace=Contigs.ace -amb=Amb.txt -profile=Assembly.qual \
-	 < ReMAlign > Final_Assembly
-	toAmos -ace Contigs.ace -o  - | bank-transact  -f -b bank -m -
-
-plot:
-	make -f $C/tools.mk rejects H=$H R=$(REJECT) C=$(CON_INFO);
-
-stepx:
-	#
-	#Assemble on the endogenous contigs:
-	cp fake.txt $(CON_INFO)
-	$C/make_template Assembly$W info=fake.txt $(MAKE_TEMPLATE)> template$X
-	make assemble_hits T=template$X V=70 P="$R" I=90 N=$X
-
-
-assemble_hits : 
-	time lastz $T 454.fa --yasra$P | \
-	$C/lav_processor  | \
-	$C/template_hits $T 454.fa cov=$V pct=$I discard=$(REJECT) \
-		stats > hits_$T.fa
-	time make assemble HITS=hits_$T.fa
-	$C/welder Assembly_$T $(CIRCULAR) $(SOLEXA) | $C/consense > Assembly$N
-
-assemble:
-	cat $(HITS) | grep '>Hit' | awk '{print $$4, $$1}' | sort -n |  \
-		uniq -w $(WL) -D | awk '{print $$2}' > $(REP)
-	$C/assembler $(HITS) -repeats=$(REP) $(SOLEXA) \
-		-rejects=$(REJ) -max_length=$(MAX) | \
-	$C/realigner > ReMAlign
-	$C/consense -amb=Amb.txt -profile=Assembly.qual \
-	    < ReMAlign > Assembly_$T
-
-#optionally fix the assembly for homopolymer runs, and areas where we are not 
-#sure. This should only be use if the reference and the assembled sequence
-#are really close or the same.
-fix:
-	$C/fix_asm Final_Assembly subs.txt Amb.txt Final_Assembly -H -S \
-		-E > Fixed_Final_Assembly
-	mv Fixed_Final_Assembly Final_Assembly
+This assembly does not benefit from the recursive process. Please run "make
+single_step" instead.
+make: *** [step2] Error 1
 ```
+
+Please run 
+
+make clean 
+
+and then run the single_step assembly.
+
+## IMPROVING THE ASSEMBLY
+
+After the initial assembly is done, one of the ways to visualize it is using LAJ
+(http://globin.bx.psu.edu/dist/laj). If your reference sequence is reference.fa
+(which is a single sequence) and the final assembly is Final_Assembly (can be multiple contigs), then do the following:
+
+lastz reference.fa Final_Assembly --chain > fake.bz
+
+laj fake.bz
+
+This should bring up a dot plot of the alignments between the reference and the
+assembled contigs. One can identify the regions that can be improved from these
+alignments. Specifically, I look at these alignments to identify neighboring
+contigs that can be merged together. 
+
+
+## DETAILS
+The most important component of the pipeline is a binary called "assembler". It
+requires the following arguments:
+
+-d, --debug : If set, print out debug information along with the results. This 
+              is much slower than the actual version and should only be run 
+              for debugging. [Default : not set]
+-h, --hits  : This is the only required argument for the module. The file should
+              be the result of running LASTZ to align reads to a reference
+              sequence with the output              
+              format=general:name1,zstart1,end1,name2,strand2,zstart2,end2,nucs2
+-a, --ace   : Name of the output ACE file for the assembly [Default : NULL]
+-s, --sam   : Name of the output SAM file for the assembly [Default : NULL]
+-m, --cov   : Only print out contigs where the average depth of coverage is
+              greater than or equal to this value [Default : 0 ]
+
+-o, --orient   : Does the sequence in the LASTZ alignment need to be oriented
+                 prior to assembly?
+-c, --declone  : Throw away putative PCR duplicates when assembling the contigs.
+                 A putative PCR duplicate is a read that has the same start 
+                 and end points on the reference as another read.
+-r, --realign  : Realign the reads after the initial consensus is made, to
+                 improve the alignments and hence the consensus. This uses the 
+                 algorithm described in Anson et al. The iterations continue if
+                 an objective score can be improved in the subsequent iteration.
+-1, --realign1 : Just run the realignment for 1 iteration.

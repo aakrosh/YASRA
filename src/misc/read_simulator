@@ -1,0 +1,212 @@
+#!/usr/bin/env python
+
+"""
+Take an input reference and create reads. Also create fictitious quality
+values. Errors should have lower quality values (of course!!!).
+"""
+
+from sys import argv, stderr, exit
+from getopt import getopt, GetoptError
+from random import normalvariate, randint, random, choice
+from string import maketrans, translate
+
+from fasta import *
+
+__author__ = "Aakrosh Ratan"
+__email__  = "ratan@bx.psu.edu"
+
+# do we want the debug information to be printed?
+debug_flag = False
+
+def weightedrandom(letter, suberrorprob, indelerrorprob):
+    choices = ["A","C","G","T","N","-"]
+
+    correct = 1.0 - (suberrorprob + indelerrorprob)
+    other = suberrorprob/4
+
+    if   letter == "A": probs=[correct, 
+                               correct + other, 
+                               correct + 2*other, 
+                               correct + 3*other, 
+                               correct + 4*other,
+                               1.0]
+    elif letter == "C": probs=[other, 
+                               other + correct, 
+                               correct + 2*other, 
+                               correct + 3*other,
+                               correct + 4*other, 
+                               1.0]
+    elif letter == "G": probs=[other, 
+                               2*other, 
+                               2*other + correct, 
+                               3*other + correct,
+                               4*other + correct, 
+                               1.0]
+    elif letter == "T": probs=[other, 
+                               2*other, 
+                               3*other, 
+                               3*other + correct,
+                               4*other + correct, 
+                               1.0]
+    elif letter == "N": probs=[other,
+                               2*other, 
+                               3*other, 
+                               4*other,
+                               4*other + correct,
+                               1.0]
+
+    rnd = random()
+    for i,j in enumerate(probs):
+        if j > rnd: 
+            index = i
+            break
+
+    if index < 5: return choices[index]
+
+    rnd = random()
+    if rnd < 0.5:
+        return ""
+    else:
+        return letter + choice(["A","C","G","T"])
+
+def reversecomplement(sequence):
+    return sequence.translate(maketrans("ACGT","TGCA"))[::-1]
+
+def main(filename, readlength, readstdlen, readcoverage, \
+         readerror, readierror, specialnames):
+
+    # how big is the reference and how many bases should i generate from each of
+    # the chrs/scaffolds
+    records = fastafile(filename)
+    reference = {}
+    
+    # we already have these reads
+    readnames = {}
+
+    for s in records:
+        reference[s.header] = len(s)
+    records.close()
+
+    # lets generate the sequences
+    records = fastafile(filename)
+
+    if specialnames == True:
+        prefix = "HWUSI-EAS610_100510_0004"
+        delim  = ":"
+    else:
+        prefix = "READ"
+        delim  = "_"
+    
+    for s in records:
+        expectedbases  = reference[s.header] * readcoverage
+        generatedbases = 0
+
+        while generatedbases < expectedbases:
+            # select a length for the read
+            readlen = int(round(normalvariate(readlength, readstdlen)))
+
+            # select a start position at random
+            startpos = randint(0, len(s) - readlen)
+
+            # generate the read
+            name = ">%s%s%d%s%d %d" % \
+                   (prefix,delim,startpos,delim,startpos+readlen,randint(0,60000))
+            while name in readnames:
+                name= ">%s%s%d%s%d %d" % \
+                      (prefix,delim,startpos,delim,startpos + readlen,randint(0,60000))
+                
+            readnames[name] = 1
+            print name
+            print >> stderr, name
+            
+            sequence = ""
+            quality  = ""
+            for b in s.sequence[startpos:startpos+readlen]:
+                g = weightedrandom(b, readerror, readierror)
+                
+                sequence += g
+
+                if g == b:
+                    q = chr(randint(20,50) + 33)
+                    quality += q
+                elif len(g) == 2:
+                    q = chr(randint(20,50) + 33) + chr(randint( 0,20) + 33)
+                    quality += q
+                elif len(g) == 0:
+                    pass               
+                else:
+                    q = chr(randint(0,20) + 33)
+                    quality += q
+
+            assert len(sequence) == len(quality), \
+                   "%d vs %d" % (len(sequence),len(quality))
+            
+            if random() > 0.5:
+                sequence = reversecomplement(sequence)
+                quality  = quality[::-1]
+            print fastarecord.prettyprintdna(sequence, 60)
+
+            for i in range(0, len(quality), 60):
+                q = [str(ord(x) - 33) for x in quality[i:i+60]]
+                print >> stderr, " ".join(q)
+            
+            generatedbases += readlen                   
+    records.close()
+
+def usage():
+    f = stderr
+    print >> f, "usage:"
+    print >> f, "read_simulator [options] reference.fa"
+    print >> f, "where the options are:"
+    print >> f, "-h,--help : print usage and quit"
+    print >> f, "-d,--debug: print debug information"
+    print >> f, "-l,--length  : the avg. length of the read [100]"
+    print >> f, "-s,--std     : the std. deviation in the read length [0]"
+    print >> f, "-c,--coverage: the specified coverage to be generated [10]"
+    print >> f, "-e,--error   : subs. error rate in the reads [0.0] (in %)"
+    print >> f, "-i,--ierror  : indel error rate in the reads [0.0] (in %)"
+    print >> f, "-n,--specialnames: name the reads Illumina style [no]"
+    
+if __name__ == "__main__":
+    try:
+        opts, args = getopt(argv[1:], "hdnl:s:c:e:i:",\
+        ["help","debug","specialnames", \
+         "length=","std=","coverage=","error=","ierror="])
+    except GetoptError, err:
+        print str(err)
+        usage()
+        exit(2) 
+
+    readlength   = 100
+    readcoverage = 10
+    readstdlen   = 0
+    readerror    = 0.0
+    readierror   = 0.0
+    specialnames = False
+
+    for o, a in opts:
+        if o in ("-h", "--help"):
+            usage()
+            exit()
+        elif o in ("-d", "--debug"):
+            debug_flag = True
+        elif o in ("-l", "--length"):
+            readlength = int(a)
+        elif o in ("-s", "--std"):
+            readstdlen = int(a)
+        elif o in ("-c", "--coverage"):
+            readcoverage = int(a)
+        elif o in ("-e", "--error"):
+            readerror = float(a)/100
+        elif o in ("-i", "--ierror"):
+            readierror = float(a)/100
+        elif o in ("-n", "--specialnames"):
+            specialnames = True
+        else:
+            assert False, "unhandled option"
+
+    if len(args) != 1:
+        usage()
+        exit(3)
+    
+    main(args[0],readlength,readstdlen,readcoverage,readerror,readierror,specialnames)

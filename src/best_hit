@@ -1,0 +1,167 @@
+#!/usr/bin/env python
+
+"""
+Input :
+    LASTZ output with the format:
+        general:name1,zstart1,end1,text1,name2,strand2,zstart2,end2,text2,nucs2
+Output :
+    The user can specify one of the following:
+    a) Choose the place with the highest number of matches. If two alignments 
+       have equal number of matches, then choose one of them randomly.
+    b) Ignore reads with multiple alignments,
+    c) Choose the best alignment only if it has x% (x can be user-specified) 
+       more matches than the second best hit. (We use x=3 and use this option 
+       internally for whole genome analyses).
+
+Assumption : This code assumes that the alignments arrive in name order, which
+implies that all alignments for a query are lumped together.
+"""
+
+from sys import argv, stderr, stdin, exit
+from getopt import getopt, GetoptError
+from random import choice
+
+__author__ = "Aakrosh Ratan"
+__email__  = "ratan@bx.psu.edu"
+
+# do we want the debug information to be printed?
+debug_flag = False
+
+def count_matches(text1, text2):
+    assert len(text1) == len(text2)
+
+    matches = 0
+    for r,q in zip(text1,text2):
+        if r == q: matches += 1
+
+    return matches
+
+def process_alignments(queryalns, printunique, printsimilar, printbest):
+    queryalns.sort(reverse = True)
+    if printunique == True and len(queryalns) == 1:
+        print "\t".join(queryalns[0][1:])
+    elif printsimilar == True:
+        if len(queryalns) == 1:
+            print "\t".join(queryalns[0][1:])
+        elif queryalns[0][0] > queryalns[1][0]:
+            print "\t".join(queryalns[0][1:])
+        elif queryalns[0][0] == queryalns[1][0]:
+            indices = [0]
+            index = 1
+            while queryalns[index][0] == queryalns[0][0]:
+                indices.append(index)
+                index += 1
+                if index >= len(queryalns): break
+
+            print "\t".join(queryalns[choice(indices)][1:])
+        else:
+            print >> stderr, "Incorrect sort of alignments"
+            exit(6)
+    elif printbest != None:
+        if len(queryalns) == 1:
+            print "\t".join(queryalns[0][1:])
+        else:
+            diff = queryalns[0][0] - queryalns[1][0]
+            if (diff * 100.0 / queryalns[0][0]) > printbest:
+                print "\t".join(queryalns[0][1:]) 
+
+def main(printunique, printsimilar, printbest):
+    queryname = None
+    queryalns = []
+
+    for line in stdin:
+        if line.startswith("#"): continue
+
+        tokens  = line.strip().split("\t")
+
+        name1   = tokens[0]
+        zstart1 = tokens[1]
+        end1    = tokens[2]
+        text1   = tokens[3]
+
+        name2   = tokens[4]
+        strand2 = tokens[5]
+        zstart2 = tokens[6]
+        end2    = tokens[7]
+        text2   = tokens[8]
+
+        others  = tokens[9:]
+
+        nummatches = count_matches(text1,text2)
+        queryaln   = [nummatches,name1,zstart1,end1,name2,strand2,zstart2,end2]
+        queryaln.extend(others)
+
+        if name2 == queryname:
+            queryalns.append(queryaln)
+        else:
+            if queryname != None:
+                process_alignments(queryalns,printunique,printsimilar,printbest)
+            queryname = name2
+            queryalns = [queryaln]
+        
+    if queryname != None:
+        process_alignments(queryalns, printunique, printsimilar, printbest)
+
+def usage():
+    f = stderr
+    print >> f, "usage:"
+    print >> f, "best_hit [options] < lastz.out"
+    print >> f, "where the options are:"
+    print >> f, "-h,--help : print usage and quit"
+    print >> f, "-d,--debug: print debug information"
+    print >> f, "-u,--unique : print reads (alignment) with only one alignment"
+    print >> f, "-s,--similar: select one alignment randomly from the set of"
+    print >> f, "              alignments with the maximum match counts"
+    print >> f, "-b,--best   : select the alignment with the maximum match"
+    print >> f, "              counts if has x% more matches than the second"
+    print >> f, "              best alignment"
+
+if __name__ == "__main__":
+    try:
+        opts, args = getopt(argv[1:], "hdusb:",\
+                     ["help", "debug", "unique", "similar", "best="])
+    except GetoptError, err:
+        print str(err)
+        usage()
+        exit(2) 
+
+    printunique  = False
+    printsimilar = False
+    printbest    = None
+
+    for o, a in opts:
+        if o in ("-h", "--help"):
+            usage()
+            exit()
+        elif o in ("-d", "--debug"):
+            debug_flag = True
+        elif o in ("-u", "--unique"):
+            printunique = True
+        elif o in ("-s", "--similar"):
+            printsimilar = True
+        elif o in ("-b", "--best"):
+            printbest = int(a)
+        else:
+            assert False, "unhandled option"
+
+    if len(args) != 0:
+        usage()
+        exit(3)
+
+    assertflag = False
+    if printunique == True:
+        if printsimilar != False or printbest != None: assertflag = True
+    if printsimilar == True:
+        if printunique != False or printbest != None: assertflag = True
+    if printbest != None:
+        if printunique != False or printsimilar != False: assertflag = True
+    if printunique == False and printsimilar == False and printbest == None:
+        print >> stderr, "Please select one of -u,-s,-b=x"
+        usage()
+        exit(4)
+
+    if assertflag == True:
+        print >> stderr, "Please select only one of -u,-s,-b=x where x is a int"
+        exit(5)
+
+    main(printunique, printsimilar, printbest)

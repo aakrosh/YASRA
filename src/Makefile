@@ -14,6 +14,10 @@
 
 
 
+# --enable-profile
+# --enable-debug
+# --enable-test
+
 
 srcdir = .
 top_srcdir = ..
@@ -37,16 +41,13 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = x86_64-unknown-linux-gnu
 host_triplet = x86_64-unknown-linux-gnu
-bin_PROGRAMS = addX$(EXEEXT) make_template$(EXEEXT) \
-	template_hits$(EXEEXT) lav_processor$(EXEEXT) \
-	assembler$(EXEEXT) realigner$(EXEEXT) consense$(EXEEXT) \
-	substitutions$(EXEEXT) trim_assembly$(EXEEXT) welder$(EXEEXT) \
-	fix_asm$(EXEEXT)
+bin_PROGRAMS = assembler$(EXEEXT) genomewelder$(EXEEXT) \
+	make_template$(EXEEXT)
 subdir = src
 DIST_COMMON = $(srcdir)/Makefile.am $(srcdir)/Makefile.in \
 	$(srcdir)/config.h.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/configure.in
+am__aclocal_m4_deps = $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(install_sh) -d
@@ -55,57 +56,32 @@ CONFIG_CLEAN_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)" "$(DESTDIR)$(bindir)"
 binPROGRAMS_INSTALL = $(INSTALL_PROGRAM)
 PROGRAMS = $(bin_PROGRAMS)
-am__objects_1 = util.$(OBJEXT)
-am__objects_2 = charvec.$(OBJEXT) seq.$(OBJEXT)
-am_addX_OBJECTS = $(am__objects_1) $(am__objects_2) addX.$(OBJEXT)
-addX_OBJECTS = $(am_addX_OBJECTS)
-addX_LDADD = $(LDADD)
-am__objects_3 = slist.$(OBJEXT)
-am__objects_4 = contig.$(OBJEXT)
-am__objects_5 = hash.$(OBJEXT)
-am__objects_6 = graph.$(OBJEXT)
+am__objects_1 =
+am__objects_2 = runtime.$(OBJEXT)
+am__objects_3 = utilities.$(OBJEXT)
+am__objects_4 = common.$(OBJEXT)
+am__objects_5 = sequences.$(OBJEXT)
+am__objects_6 = slinklist.$(OBJEXT)
+am__objects_7 = hashtable.$(OBJEXT)
+am__objects_8 = contig.$(OBJEXT)
+am__objects_9 = graph.$(OBJEXT)
 am_assembler_OBJECTS = $(am__objects_1) $(am__objects_2) \
 	$(am__objects_3) $(am__objects_4) $(am__objects_5) \
-	$(am__objects_6) assembler.$(OBJEXT)
+	$(am__objects_6) $(am__objects_7) $(am__objects_8) \
+	$(am__objects_9) assembler.$(OBJEXT)
 assembler_OBJECTS = $(am_assembler_OBJECTS)
 assembler_LDADD = $(LDADD)
-am__objects_7 = charvec.$(OBJEXT)
-am__objects_8 = iupac.$(OBJEXT)
-am_consense_OBJECTS = $(am__objects_1) $(am__objects_7) \
-	$(am__objects_3) $(am__objects_8) consense.$(OBJEXT)
-consense_OBJECTS = $(am_consense_OBJECTS)
-consense_LDADD = $(LDADD)
-am_fix_asm_OBJECTS = $(am__objects_1) $(am__objects_2) \
-	$(am__objects_3) $(am__objects_5) fix_asm.$(OBJEXT)
-fix_asm_OBJECTS = $(am_fix_asm_OBJECTS)
-fix_asm_LDADD = $(LDADD)
-am_lav_processor_OBJECTS = $(am__objects_1) $(am__objects_3) \
-	lav_processor.$(OBJEXT)
-lav_processor_OBJECTS = $(am_lav_processor_OBJECTS)
-lav_processor_LDADD = $(LDADD)
+am_genomewelder_OBJECTS = $(am__objects_1) $(am__objects_2) \
+	$(am__objects_3) $(am__objects_4) $(am__objects_5) \
+	$(am__objects_6) $(am__objects_7) $(am__objects_8) \
+	genomewelder.$(OBJEXT)
+genomewelder_OBJECTS = $(am_genomewelder_OBJECTS)
+genomewelder_LDADD = $(LDADD)
 am_make_template_OBJECTS = $(am__objects_1) $(am__objects_2) \
+	$(am__objects_3) $(am__objects_4) $(am__objects_5) \
 	make_template.$(OBJEXT)
 make_template_OBJECTS = $(am_make_template_OBJECTS)
 make_template_LDADD = $(LDADD)
-am_realigner_OBJECTS = $(am__objects_1) realigner.$(OBJEXT)
-realigner_OBJECTS = $(am_realigner_OBJECTS)
-realigner_LDADD = $(LDADD)
-am_substitutions_OBJECTS = $(am__objects_1) $(am__objects_2) \
-	substitutions.$(OBJEXT)
-substitutions_OBJECTS = $(am_substitutions_OBJECTS)
-substitutions_LDADD = $(LDADD)
-am_template_hits_OBJECTS = $(am__objects_1) $(am__objects_2) \
-	template_hits.$(OBJEXT)
-template_hits_OBJECTS = $(am_template_hits_OBJECTS)
-template_hits_LDADD = $(LDADD)
-am_trim_assembly_OBJECTS = $(am__objects_1) $(am__objects_2) \
-	trim_assembly.$(OBJEXT)
-trim_assembly_OBJECTS = $(am_trim_assembly_OBJECTS)
-trim_assembly_LDADD = $(LDADD)
-am_welder_OBJECTS = $(am__objects_1) $(am__objects_2) $(am__objects_3) \
-	$(am__objects_4) welder.$(OBJEXT)
-welder_OBJECTS = $(am_welder_OBJECTS)
-welder_LDADD = $(LDADD)
 binSCRIPT_INSTALL = $(INSTALL_SCRIPT)
 SCRIPTS = $(bin_SCRIPTS)
 DEFAULT_INCLUDES = -I. -I$(srcdir) -I.
@@ -115,28 +91,21 @@ COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
 CCLD = $(CC)
 LINK = $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o $@
-SOURCES = $(addX_SOURCES) $(assembler_SOURCES) $(consense_SOURCES) \
-	$(fix_asm_SOURCES) $(lav_processor_SOURCES) \
-	$(make_template_SOURCES) $(realigner_SOURCES) \
-	$(substitutions_SOURCES) $(template_hits_SOURCES) \
-	$(trim_assembly_SOURCES) $(welder_SOURCES)
-DIST_SOURCES = $(addX_SOURCES) $(assembler_SOURCES) \
-	$(consense_SOURCES) $(fix_asm_SOURCES) \
-	$(lav_processor_SOURCES) $(make_template_SOURCES) \
-	$(realigner_SOURCES) $(substitutions_SOURCES) \
-	$(template_hits_SOURCES) $(trim_assembly_SOURCES) \
-	$(welder_SOURCES)
+SOURCES = $(assembler_SOURCES) $(genomewelder_SOURCES) \
+	$(make_template_SOURCES)
+DIST_SOURCES = $(assembler_SOURCES) $(genomewelder_SOURCES) \
+	$(make_template_SOURCES)
 ETAGS = etags
 CTAGS = ctags
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
-ACLOCAL = ${SHELL} /afs/bx.psu.edu/home/ratan/projects/assembler/aakrosh/code.d/missing --run aclocal-1.9
+ACLOCAL = ${SHELL} /afs/bx.psu.edu/home/ratan/projects/yasra2/missing --run aclocal-1.9
 AMDEP_FALSE = #
 AMDEP_TRUE = 
-AMTAR = ${SHELL} /afs/bx.psu.edu/home/ratan/projects/assembler/aakrosh/code.d/missing --run tar
+AMTAR = ${SHELL} /afs/bx.psu.edu/home/ratan/projects/yasra2/missing --run tar
 ARCH = -minline-all-stringops -momit-leaf-frame-pointer
-AUTOCONF = ${SHELL} /afs/bx.psu.edu/home/ratan/projects/assembler/aakrosh/code.d/missing --run autoconf
-AUTOHEADER = ${SHELL} /afs/bx.psu.edu/home/ratan/projects/assembler/aakrosh/code.d/missing --run autoheader
-AUTOMAKE = ${SHELL} /afs/bx.psu.edu/home/ratan/projects/assembler/aakrosh/code.d/missing --run automake-1.9
+AUTOCONF = ${SHELL} /afs/bx.psu.edu/home/ratan/projects/yasra2/missing --run autoconf
+AUTOHEADER = ${SHELL} /afs/bx.psu.edu/home/ratan/projects/yasra2/missing --run autoheader
+AUTOMAKE = ${SHELL} /afs/bx.psu.edu/home/ratan/projects/yasra2/missing --run automake-1.9
 AWK = gawk
 CC = gcc
 CCDEPMODE = depmode=gcc3
@@ -144,8 +113,8 @@ CFLAGS = -g -O2
 CPP = gcc -E
 CPPFLAGS = 
 CYGPATH_W = echo
-DEBUG_FALSE = 
-DEBUG_TRUE = #
+DEBUG_FALSE = #
+DEBUG_TRUE = 
 DEFS = -DHAVE_CONFIG_H
 DEPDIR = .deps
 ECHO_C = 
@@ -162,23 +131,21 @@ LDFLAGS =
 LIBOBJS = 
 LIBS = 
 LTLIBOBJS = 
-MAKEINFO = ${SHELL} /afs/bx.psu.edu/home/ratan/projects/assembler/aakrosh/code.d/missing --run makeinfo
+MAKEINFO = ${SHELL} /afs/bx.psu.edu/home/ratan/projects/yasra2/missing --run makeinfo
 OBJEXT = o
 PACKAGE = yasra
 PACKAGE_BUGREPORT = ratan@bx.psu.edu
 PACKAGE_NAME = YASRA
-PACKAGE_STRING = YASRA 1.0
+PACKAGE_STRING = YASRA 2.0
 PACKAGE_TARNAME = yasra
-PACKAGE_VERSION = 1.0
+PACKAGE_VERSION = 2.0
 PATH_SEPARATOR = :
 PROFILE_FALSE = 
 PROFILE_TRUE = #
 SET_MAKE = 
 SHELL = /bin/sh
 STRIP = 
-TESTING_FALSE = 
-TESTING_TRUE = #
-VERSION = 1.0
+VERSION = 2.0
 ac_ct_CC = gcc
 ac_ct_STRIP = 
 am__fastdepCC_FALSE = #
@@ -203,7 +170,7 @@ host_os = linux-gnu
 host_vendor = unknown
 includedir = ${prefix}/include
 infodir = ${prefix}/info
-install_sh = /afs/bx.psu.edu/home/ratan/projects/assembler/aakrosh/code.d/install-sh
+install_sh = /afs/bx.psu.edu/home/ratan/projects/yasra2/install-sh
 libdir = ${exec_prefix}/lib
 libexecdir = ${exec_prefix}/libexec
 localstatedir = ${prefix}/var
@@ -216,39 +183,33 @@ sbindir = ${exec_prefix}/sbin
 sharedstatedir = ${prefix}/com
 sysconfdir = ${prefix}/etc
 target_alias = 
-OPTIMIZATIONS = -DNDEBUG -O2 -funroll-all-loops $(ARCH)
-#OPTIMIZATIONS = -ggdb
-#OPTIMIZATIONS = -ggdb -pg -DNDEBUG -O2 -funroll-all-loops $(ARCH)
-#OPTIMIZATIONS = -ggdb -DDEBUG
+#OPTIMIZATIONS = -DNDEBUG -O2 -funroll-all-loops $(ARCH)
+##OPTIMIZATIONS = -ggdb -pg -DNDEBUG -O2 -funroll-all-loops $(ARCH)
+OPTIMIZATIONS = -ggdb -DDEBUG
 AM_CFLAGS = -W -Wformat -Wimplicit -Wreturn-type -Wall -Werror \
             -Wunused-variable -Wunused-parameter -Wreturn-type -Wswitch \
             -Wcast-align -Winline -Wnested-externs -Wextra $(OPTIMIZATIONS) \
-            -std=c99
+            -std=c99 
 
-bin_SCRIPTS = finisher tools.mk
 
-###############################################################################
-UTIL_SRC = util.h util.c
-CHR_SRC = charvec.h charvec.c
-SEQ_SRC = charvec.h charvec.c seq.h seq.c
-SLIST_SRC = slist.h slist.c
-HASH_SRC = hash.h hash.c
-CONTIG_SRC = contig.h contig.c
-GRAPH_SRC = graph.h graph.c
-IUPAC_SRC = iupac.h iupac.c
-addX_SOURCES = $(UTIL_SRC) $(SEQ_SRC) addX.c
-make_template_SOURCES = $(UTIL_SRC) $(SEQ_SRC) make_template.c
-template_hits_SOURCES = $(UTIL_SRC) $(SEQ_SRC) template_hits.c
-lav_processor_SOURCES = $(UTIL_SRC) $(SLIST_SRC) lav_processor.c
-assembler_SOURCES = $(UTIL_SRC) $(SEQ_SRC) $(SLIST_SRC) $(CONTIG_SRC) \
-                    $(HASH_SRC) $(GRAPH_SRC) assembler.c
+################################################################################
+ASSERTS_SRC = asserts.h
+COMMON_SRC = common.c common.h
+CONTIG_SRC = contig.c contig.h
+GRAPH_SRC = graph.c graph.h
+HASHTABLE_SRC = hashtable.c hashtable.h
+RUNTIME_SRC = runtime.c runtime.h
+SEQUENCES_SRC = sequences.c sequences.h
+SLINKLIST_SRC = slinklist.c slinklist.h
+UTILITIES_SRC = utilities.c utilities.h
 
-realigner_SOURCES = $(UTIL_SRC) realigner.c
-consense_SOURCES = $(UTIL_SRC) $(CHR_SRC) $(SLIST_SRC) $(IUPAC_SRC) consense.c
-substitutions_SOURCES = $(UTIL_SRC) $(SEQ_SRC) substitutions.c
-trim_assembly_SOURCES = $(UTIL_SRC) $(SEQ_SRC) trim_assembly.c
-welder_SOURCES = $(UTIL_SRC) $(SEQ_SRC) $(SLIST_SRC) $(CONTIG_SRC) welder.c
-fix_asm_SOURCES = $(UTIL_SRC) $(SEQ_SRC) $(SLIST_SRC) $(HASH_SRC) fix_asm.c
+################################################################################
+assembler_SOURCES = $(ASSERTS_SRC) $(RUNTIME_SRC) $(UTILITIES_SRC) $(COMMON_SRC) $(SEQUENCES_SRC) $(SLINKLIST_SRC) $(HASHTABLE_SRC) $(CONTIG_SRC) $(GRAPH_SRC) assembler.c
+genomewelder_SOURCES = $(ASSERTS_SRC) $(RUNTIME_SRC) $(UTILITIES_SRC) $(COMMON_SRC) $(SEQUENCES_SRC) $(SLINKLIST_SRC) $(HASHTABLE_SRC) $(CONTIG_SRC) genomewelder.c
+make_template_SOURCES = $(ASSERTS_SRC) $(RUNTIME_SRC) $(UTILITIES_SRC) $(COMMON_SRC) $(SEQUENCES_SRC) make_template.c
+
+################################################################################
+bin_SCRIPTS = fasta.py genomewalker trim_assembly best_hit
 all: config.h
 	$(MAKE) $(AM_MAKEFLAGS) all-am
 
@@ -323,39 +284,15 @@ uninstall-binPROGRAMS:
 
 clean-binPROGRAMS:
 	-test -z "$(bin_PROGRAMS)" || rm -f $(bin_PROGRAMS)
-addX$(EXEEXT): $(addX_OBJECTS) $(addX_DEPENDENCIES) 
-	@rm -f addX$(EXEEXT)
-	$(LINK) $(addX_LDFLAGS) $(addX_OBJECTS) $(addX_LDADD) $(LIBS)
 assembler$(EXEEXT): $(assembler_OBJECTS) $(assembler_DEPENDENCIES) 
 	@rm -f assembler$(EXEEXT)
 	$(LINK) $(assembler_LDFLAGS) $(assembler_OBJECTS) $(assembler_LDADD) $(LIBS)
-consense$(EXEEXT): $(consense_OBJECTS) $(consense_DEPENDENCIES) 
-	@rm -f consense$(EXEEXT)
-	$(LINK) $(consense_LDFLAGS) $(consense_OBJECTS) $(consense_LDADD) $(LIBS)
-fix_asm$(EXEEXT): $(fix_asm_OBJECTS) $(fix_asm_DEPENDENCIES) 
-	@rm -f fix_asm$(EXEEXT)
-	$(LINK) $(fix_asm_LDFLAGS) $(fix_asm_OBJECTS) $(fix_asm_LDADD) $(LIBS)
-lav_processor$(EXEEXT): $(lav_processor_OBJECTS) $(lav_processor_DEPENDENCIES) 
-	@rm -f lav_processor$(EXEEXT)
-	$(LINK) $(lav_processor_LDFLAGS) $(lav_processor_OBJECTS) $(lav_processor_LDADD) $(LIBS)
+genomewelder$(EXEEXT): $(genomewelder_OBJECTS) $(genomewelder_DEPENDENCIES) 
+	@rm -f genomewelder$(EXEEXT)
+	$(LINK) $(genomewelder_LDFLAGS) $(genomewelder_OBJECTS) $(genomewelder_LDADD) $(LIBS)
 make_template$(EXEEXT): $(make_template_OBJECTS) $(make_template_DEPENDENCIES) 
 	@rm -f make_template$(EXEEXT)
 	$(LINK) $(make_template_LDFLAGS) $(make_template_OBJECTS) $(make_template_LDADD) $(LIBS)
-realigner$(EXEEXT): $(realigner_OBJECTS) $(realigner_DEPENDENCIES) 
-	@rm -f realigner$(EXEEXT)
-	$(LINK) $(realigner_LDFLAGS) $(realigner_OBJECTS) $(realigner_LDADD) $(LIBS)
-substitutions$(EXEEXT): $(substitutions_OBJECTS) $(substitutions_DEPENDENCIES) 
-	@rm -f substitutions$(EXEEXT)
-	$(LINK) $(substitutions_LDFLAGS) $(substitutions_OBJECTS) $(substitutions_LDADD) $(LIBS)
-template_hits$(EXEEXT): $(template_hits_OBJECTS) $(template_hits_DEPENDENCIES) 
-	@rm -f template_hits$(EXEEXT)
-	$(LINK) $(template_hits_LDFLAGS) $(template_hits_OBJECTS) $(template_hits_LDADD) $(LIBS)
-trim_assembly$(EXEEXT): $(trim_assembly_OBJECTS) $(trim_assembly_DEPENDENCIES) 
-	@rm -f trim_assembly$(EXEEXT)
-	$(LINK) $(trim_assembly_LDFLAGS) $(trim_assembly_OBJECTS) $(trim_assembly_LDADD) $(LIBS)
-welder$(EXEEXT): $(welder_OBJECTS) $(welder_DEPENDENCIES) 
-	@rm -f welder$(EXEEXT)
-	$(LINK) $(welder_LDFLAGS) $(welder_OBJECTS) $(welder_LDADD) $(LIBS)
 install-binSCRIPTS: $(bin_SCRIPTS)
 	@$(NORMAL_INSTALL)
 	test -z "$(bindir)" || $(mkdir_p) "$(DESTDIR)$(bindir)"
@@ -382,25 +319,17 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-include ./$(DEPDIR)/addX.Po
 include ./$(DEPDIR)/assembler.Po
-include ./$(DEPDIR)/charvec.Po
-include ./$(DEPDIR)/consense.Po
+include ./$(DEPDIR)/common.Po
 include ./$(DEPDIR)/contig.Po
-include ./$(DEPDIR)/fix_asm.Po
+include ./$(DEPDIR)/genomewelder.Po
 include ./$(DEPDIR)/graph.Po
-include ./$(DEPDIR)/hash.Po
-include ./$(DEPDIR)/iupac.Po
-include ./$(DEPDIR)/lav_processor.Po
+include ./$(DEPDIR)/hashtable.Po
 include ./$(DEPDIR)/make_template.Po
-include ./$(DEPDIR)/realigner.Po
-include ./$(DEPDIR)/seq.Po
-include ./$(DEPDIR)/slist.Po
-include ./$(DEPDIR)/substitutions.Po
-include ./$(DEPDIR)/template_hits.Po
-include ./$(DEPDIR)/trim_assembly.Po
-include ./$(DEPDIR)/util.Po
-include ./$(DEPDIR)/welder.Po
+include ./$(DEPDIR)/runtime.Po
+include ./$(DEPDIR)/sequences.Po
+include ./$(DEPDIR)/slinklist.Po
+include ./$(DEPDIR)/utilities.Po
 
 .c.o:
 	if $(COMPILE) -MT $@ -MD -MP -MF "$(DEPDIR)/$*.Tpo" -c -o $@ $<; \
@@ -586,6 +515,8 @@ uninstall-am: uninstall-binPROGRAMS uninstall-binSCRIPTS \
 	uninstall-am uninstall-binPROGRAMS uninstall-binSCRIPTS \
 	uninstall-info-am
 
+
+################################################################################
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.
 .NOEXPORT:

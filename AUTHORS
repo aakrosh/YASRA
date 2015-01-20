@@ -1,7 +1,7 @@
 Most of the code in this package is written by Aakrosh Ratan (ratan@bx.psu.edu).
-Some of the functions in charvec.c, seq.c and util.c were written by Scott
-Schwartz.  The realigner module was downloaded from
-ftp://ftp.cs.arizona.edu/realigner and modified by Aakrosh Ratan to include
-support for ACE files and accept larger sequences. Please contact Aakrosh Ratan:
-ratan@bx.psu.edu for support for this software.
+
+LASTZ, the aligner used by YASRA to align the sequences to the reference
+sequence is written and mantained by Bob Harris (rsharris@bx.psu.edu). 
+
+Please contact Aakrosh Ratan: ratan@bx.psu.edu for support for this software.
 

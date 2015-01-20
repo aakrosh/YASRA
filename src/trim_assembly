@@ -1,0 +1,147 @@
+#!/usr/bin/env python
+
+"""
+Input:
+a) A fasta reference genome
+b) A file with the hits to the genome
+c) A file with the liberal hits to the genome
+
+Output:
+A trimmed fasta file of sequences
+"""
+
+from sys import argv, stderr, stdin, exit
+from getopt import getopt, GetoptError
+from array import array
+
+from fasta import *
+
+__author__ = "Aakrosh Ratan"
+__email__  = "ratan@bx.psu.edu"
+
+# do we want the debug information to be printed?
+debug_flag = False
+
+def read_reference(filename):
+    records = fastafile(filename)
+    reference = {}
+
+    for r in records:
+        reference[r.header] = r.sequence
+
+    records.close()
+    assert len(reference) == 1
+
+    return reference.values()[0]
+
+def populate(filename, depth):
+    file  =  open(filename, "r")
+    names = {}
+
+    for line in file:
+        if line.startswith("#"): continue
+
+        tokens = line.strip().split("\t")
+        assert len(tokens) == 8
+
+        zstart1 = int(tokens[1])
+        end1    = int(tokens[2])
+        name    = tokens[3]
+
+        names[name] = 1
+
+        for i in range(zstart1,end1):
+            depth[i] += 1
+
+    file.close()
+    return names
+
+def select_populate(filename, names, depth):
+    file  =  open(filename, "r")
+
+    for line in file:
+        if line.startswith("#"): continue
+
+        tokens = line.strip().split("\t")
+        assert len(tokens) == 8
+
+        zstart1 = int(tokens[1])
+        end1    = int(tokens[2])
+        name    = tokens[3]
+
+        if name in names: continue
+
+        for i in range(zstart1,end1):
+            depth[i] += 1
+
+    file.close()
+
+def main(refname, hitsname, rejectsname, mincoverage):
+    # read the reference sequence
+    reference = read_reference(refname)
+    print >> stderr, "Read the reference sequence"
+
+    # create two arrays, one for the hits and another one for the rejects
+    hits = array('I', [0] * len(reference))
+    rejs = array('I', [0] * len(reference))
+
+    # now populate the arrays with the coverage values from the two files
+    names = populate(hitsname, hits)
+    select_populate(rejectsname, names, rejs)
+
+    index = 1
+
+    i = 0
+    start = -1
+    while i < len(reference):
+        if hits[i] < mincoverage or rejs[i] >= hits[i]:
+            if start != -1 and (i - start) > 100:
+                print ">Contig%d" % index 
+                print fastarecord.prettyprintdna(reference[start:i], 60)
+                index += 1
+            while i < len(reference) and \
+                  (hits[i] < mincoverage or rejs[i] >= hits[i]):
+                i += 1
+            start = i
+        i += 1
+
+    if start != -1 and (i - start) > 100:
+        print ">Contig%d" % index
+        print fastarecord.prettyprintdna(reference[start:i], 60)
+                        
+def usage():
+    f = stderr
+    print >> f, "usage:"
+    print >> f, "trim_assembly [options] template.fa hits.txt rejects.txt"
+    print >> f, "where the options are:"
+    print >> f, "-h,--help : print usage and quit"
+    print >> f, "-d,--debug: print debug information"
+    print >> f, "-c,--coverage: the minimum coverage threshold. Anything below"
+    print >> f, "               this threshold will be trimmed [3]"
+
+if __name__ == "__main__":
+    try:
+        opts, args = getopt(argv[1:], "hdc:",["help", "debug", "coverage="])
+    except GetoptError, err:
+        print str(err)
+        usage()
+        exit(2) 
+
+    mincoverage = 3
+
+    for o, a in opts:
+        if o in ("-h", "--help"):
+            usage()
+            exit()
+        elif o in ("-d", "--debug"):
+            debug_flag = True
+        elif o in ("-c", "--coverage"):
+            mincoverage = int(a)
+        else:
+            assert False, "unhandled option"
+
+    if len(args) != 3:
+        usage()
+        exit(3)
+
+    main(args[0], args[1], args[2], mincoverage)

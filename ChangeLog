@@ -1,5 +1,35 @@
-2010-02-27 Aakrosh Ratan ratan@bx.psu.edu
-
-* contig.c:625 The slice from the reference to be aligned to a read should be
-  from the beginning of the first interval to the end of the last, not the first
-  of the last
+2014-03-26
+    * Made changes to the code to compile it with gcc-4.8.
+2012-07-03
+	* Illumina read name now have spaces in them. The read names are not unique
+	  when these spaces are not considered. I modified the assembler.c and the
+	  Makefile to handles these new names.
+2012-06-08
+    * Added a check in sequeces.c to check for empty hits file
+2012-04-14
+    * Change the genomewelder.c to align 250 bps from the contig ends before
+      welding them together.
+2012-02-04
+    * Added the module "best_hit" which selects one qualifying alignment per
+      read based on user specified switch. 
+    * Made changes to README to reflect the addition of the module.
+2011-09-25
+    * Added an option -m/--cov which removes any contigs where the average
+      depth of coverage is less than specified by the user.
+2011-08-31
+    * Changed code in assembler.c to handle ACE files correctly. Some of the
+      viewers including Tablet were not working with the previously generated
+      ACE files.
+2011-08-05
+    * The contig names for the assembly and ACE file are now named consistently.
+      The format of the names is Contig${index}_${reference}_${start}_${stop},
+      where index is just added to make all contig names unique.   
+    * Made changes to contig.c to remove a memory leak. 
+2011-07-22
+    * Added an option -1, which restricts the realignment step to just one
+      iteration. This is to speed up the assembly of regions with high coverage.
+2011-07-15
+    * Added an option -i which implies that the quality values are in Illumina
+      format. The default quality values are in Sanger quality format.
+2011-07-11
+    * First tag. Set for release

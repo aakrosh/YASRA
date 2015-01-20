@@ -1,239 +1,479 @@
 #include "graph.h"
 
-/*return a new empty graph*/
-GRAPH* new_graph()
-{	
-	GRAPH* g = ckallocz(sizeof(GRAPH));
-	g->node_list = NULL;
-	g->node_hash = new_hash(2);
-	g->edge_list = NULL;
-	return g;
+/* create a new graph */
+graph* new_graph()
+{
+    graph* g = ckallocz(sizeof(graph));
+    g->node_hash = new_hashtable(8);
+    return g;
 }
 
-/*free the resources help by the graph*/
-void free_graph(GRAPH** pgraph)
+/* create a new node for the graph */
+node* new_node(const char* const name, void* const val)
 {
-	GRAPH* graph = *pgraph;
-	NODE* iter = NULL;
-	for(iter = graph->node_list; iter; iter = iter->next){
-		ckfree(iter->edges);
-	}
-	slfreelist(&graph->node_list);
-	slfreelist(&graph->edge_list);
-	free_hash(&graph->node_hash);
-	ckfree(graph);
+    node* n = ckallocz(sizeof(node));
+    
+    n->name = copy_string(name);
+    n->val  = val;
+
+    n->key = -1;    
+    n->visited = FALSE;    
+
+    /* no edges initially */
+    n->num_edges = 0;
+    n->edges = NULL;
+
+    return n;    
 }
 
-/*add a new node to the graph*/
-NODE* add_node(GRAPH* const g, void* const val, char* const name)
+/* return TRUE if an edge exists from n1 to n2 */
+static bool edge_exists(const node* const n1, const node* const n2)
 {
-	NODE* node = NULL;
+    pre(n1 != NULL);
+    pre(n2 != NULL);
+    pre(n1 != n2);
 
-	/*is the node already there?*/
-	if((node = hash_find_val(g->node_hash, name)) != NULL){
-		return node;
-	}
+    int i;
+    for(i = 0; i < n1->num_edges; i++){
+        forceassert(n1->edges[i]->n1 == n1 || n1->edges[i]->n2 == n1);
+        if(n1->edges[i]->n1 == n2 || n1->edges[i]->n2 == n2){
+            return TRUE;
+        }
+    }
 
-	node = ckallocz(sizeof(NODE));
-	node->name = name;
-	node->visited = FALSE;
-	node->val = val;
-	node->num_edges = 0;
-	node->num_alloced = 0;
-	node->edges = NULL;
-	node->key = -1;
-
-	sladd_head(&g->node_list, node);
-	hash_add(g->node_hash, node->name, node);
-	return node;
-}
-
-/*does an edge already exist?*/
-static bool edge_exists(const GRAPH* const g, const NODE* const a, const NODE* const b)
-{
-	NODE* node = hash_must_find_val(g->node_hash, a->name);
-	int i = 0;
-	EDGE* edge = NULL;
-	for(i = 0; i < node->num_edges; i++){
-		edge = node->edges[i];
-		if((edge->a == b) || (edge->b == b)){
-			return TRUE;
-		}
-	}
     return FALSE;
 }
 
-/*add node to the edge*/
-static void add_new_edge(NODE* const node, EDGE* const edge)
+/* make an edge from n1 to n2 */
+static void make_edge(graph* const g, 
+                      node* const n1, 
+                      node* const n2, 
+                      const int weight)
 {
-	/*do i need more memory ? */
-	if(node->num_edges == node->num_alloced){
-		int diff = node->num_alloced;
-		int old_size = node->num_alloced * sizeof(EDGE);
-		node->num_alloced +=  NUM_EDGES;
-		int new_size = node->num_alloced * sizeof(EDGE);
-		node->edges = ckrealloc(node->edges, new_size);
-		memset(node->edges+diff, 0, (new_size-old_size));
-	}
+    /* no self edges */
+    pre(n1 != n2);
+    pre(n1 != NULL);
+    pre(n2 != NULL);
 
-    node->edges[node->num_edges++] = edge;
+    /* does an edge exist from n1 to n2 */
+    if(!edge_exists(n1, n2)){
+        /* create the edge. */
+        edge* e    = ckalloc(sizeof(edge));
+        e->next    = NULL;
+
+        e->n1   = n1;
+        e->n2   = n2;
+        e->weight = weight;
+        
+        /* add it both of the nodes edge list */
+        n1->num_edges++;
+        n1->edges = ckrealloc(n1->edges, n1->num_edges * sizeof(edge*));
+        n1->edges[n1->num_edges - 1] = e;
+
+        n2->num_edges++;
+        n2->edges = ckrealloc(n2->edges, n2->num_edges * sizeof(edge*));
+        n2->edges[n2->num_edges - 1] = e;
+
+        sladdhead(&g->edge_list, e);
+    }
 }
 
-/*add an edge in the graph from node a to node b*/
-void add_edge(GRAPH* const g, NODE* const a, NODE* const b, const int weight)
+static inline int get_alignment_score(const node* const n1, 
+                                      const node* const n2,
+                                      int* const pmax1,
+                                      int* const pmax2,
+                                      int* const pmm)
 {
-	/*does the edge already exist? */
-	if(edge_exists(g, a, b)){
-		return;
-	}
+    pre(n1 != NULL);
+    pre(n2 != NULL);
 
-	/*if it doesnt exist, we go and make the to and fro connection*/
-	EDGE* edge = ckallocz(sizeof(EDGE));
-	edge->a = a;
-	edge->b = b;
-	edge->weight = weight;
-	sladd_head(&g->edge_list, edge);
-
-	add_new_edge(a, edge);
-	add_new_edge(b, edge);
+    return get_read_alignment_score(n1->val, n2->val, pmax1, pmax2, pmm);
 }
 
-/* take the node, align it with every other node in the graph and if the 
- * overlap passes the thresholds then add an edge in the graph with the 
- * overlap score as the weight for the edge, return the number of new edges
- * formed.*/
-int process_node(GRAPH* const g, NODE* const node, const bool suffix, int*** const pV, int** const pF, int*** pI)
+// static inline void remove_edges(graph* const g, node* const n1)
+// {
+//     pre(n1 != NULL);
+// 
+//     int i;
+//     node* n2;
+// 
+//     for(i = 0; i < n1->num_edges; i++){
+//         n2 = n1->edges[i]->n1 == n1 ? n1->edges[i]->n2 : n1->edges[i]->n1;
+//         forceassert(n2->edges[n2->num_edges - 1] == n1->edges[i]);
+//         slremove(&g->edge_list, n1->edges[i]);
+//         ckfree(n1->edges[i]);
+//         n2->num_edges--;
+//         if(0 == n2->num_edges){
+//             n2->edges = NULL;
+//         }else{
+//             n2->edges = ckrealloc(n2->edges, n2->num_edges * sizeof(edge*));
+//         }
+//     }
+// 
+//     n1->num_edges = 0;   
+//     return;
+// }
+
+#if 0
+/* add this node to the graph. Return the first node on the list that aligns
+ * properly with this node. That will act as the input for the next node to be
+ * added. This is only possible because the input is sorted */
+node* add_node(graph* g, node* const n, node* const list)
 {
-	NODE* iter = NULL;
-	NODE* list = g->node_list;
-	int score = -1;
-	int num_edges = 0;
-	int bt = -1, et = -1;
-	int br = -1, er = -1;
-	sscanf(READ_HEAD((READ*)node->val),"%*s %d %d ", &bt, &et);
-	int check = suffix ? OVERLAP_THRESHOLD : contained_threshold(et-bt);
+    pre(g != NULL);
+    pre(n != NULL);
 
-	for(iter = list; iter; iter = iter->next){
-		if(iter == node){
-			continue;
-		}
+    /* add this node to the hashtable of nodes. */
+    bin* bin = add_hashtable(g->node_hash, n->name, strlen(n->name), n);
+    ckfree(bin->name);
+    *(&bin->name) = n->name;
+    
+    seqread* r1 = n->val;
+    
+    /* align it to other prospective nodes and create an edge if it passes
+     * the thresholds */
+    int score;
+    seqread* r2;
+    node* iter = list;
 
-		sscanf(READ_HEAD((READ*)iter->val),"%*s %d %d ", &br, &er);
-		if(er <= bt){
-			break;
-		}
+    /* the first node this node aligns to */
+    node* probablecandidate = NULL;
 
-		if((score = score_reads(iter->val, node->val, suffix, pV, pF, pI)) >= check){
-#if DEBUG
-			fprintf(stderr,"Edge %s : %s Score: %d\n", iter->name,node->name,score);
+    /* roughly the number of bases that align from read r1 and r2, and the
+     * number of mismatches in the alignement */
+    int max1, max2, diffs;
+
+    while(iter){
+        r2 = iter->val;
+        assert(r1->s >= r2->s);
+    
+        if(r1->s >= r2->s && r1->s < r2->e){
+            score = get_alignment_score(n, iter, &max1, &max2, &diffs);
+
+            /* for considering two reads to be aligned, the following conditions
+             * need to be satisfied: 
+             * a) Overlap score needs to exceeds a threshold 
+             * b) The overlap length should be >= than their speculated overlap
+             *    on the reference.
+             * c) Their speculated overlap on the reference should be should be
+             *    greater than 5 bp.
+             * d) The number of differences should be less than 10% of the 
+             *    length of the overlap .*/
+            if(score > THRESHOLD                    && 
+               MIN(max1,max2) >= abs(r2->e - r1->s) &&
+               abs(r2->e - r1->s) > 5               && 
+               diffs <= (0.1 * MAX(max1, max2))){
+                make_edge(g, iter, n, score);
+                if(probablecandidate == NULL) probablecandidate = iter;
+            }
+        }
+
+        if(r1->s > r2->e){
+            break;
+        }
+        iter = iter->next;
+    }
+
+    /* now add this to the node list */ 
+    sladdhead(&g->node_list, n);
+
+    if(probablecandidate == NULL) probablecandidate = g->node_list;
+    return probablecandidate;
+}
 #endif
-			add_edge(g, iter, node, score);
-			num_edges++;
-		}
-	}
 
-	return num_edges;
+/* add this node to the graph. Return the first node on the list that aligns
+ * properly with this node. That will act as the input for the next node to be
+ * added. This is only possible because the input is sorted */
+void add_node(graph* g, node* const n)
+{
+    pre(g != NULL);
+    pre(n != NULL);
+
+    /* add this node to the hashtable of nodes. */
+    bin* bin = add_hashtable(g->node_hash, n->name, strlen(n->name), n);
+    ckfree(bin->name);
+    *(&bin->name) = n->name;
+    
+    seqread* r1 = n->val;
+    seqread* r2 = NULL;
+    
+    /* align it to other prospective nodes and create an edge if it passes
+     * the thresholds */
+    node* iter = g->node_list;
+
+    /* roughly the number of bases that align from read r1 and r2, and the
+     * number of mismatches in the alignement */
+    int score, max1, max2, diffs, expectedoverlap;
+
+    /* make edges with these nodes */
+    node** nodes = NULL;
+    int*  scores = NULL;
+    int numnodes = 0;
+
+    /* if a read aligns with one read, then it should align with all the reads
+     * from then on. This should happen because the reads are sorted. If this 
+     * does not happen then maybe this read should not be included in the
+     * assembly  */
+    while(iter){
+        r2 = iter->val;
+        forceassert(r1->s >= r2->s);
+    
+        if(r1->s >= r2->s && r1->s < r2->e){
+            /* the expected overlap between these two reads */
+            expectedoverlap = r2->e - r1->s;
+
+            /* the observed alignment */
+            score = get_alignment_score(n, iter, &max1, &max2, &diffs);
+
+            /* if the observed alignment/overlap close to the expected
+             * alignment/overlap */
+            if(expectedoverlap > 5 && 
+               score > THRESHOLD   && 
+               abs(MIN(max1, max2) - expectedoverlap) < 5){
+                numnodes++;
+
+                scores = ckrealloc(scores, numnodes * sizeof(int));
+                nodes  = ckrealloc(nodes,  numnodes * sizeof(node*));
+
+                scores[numnodes-1] = score;
+                nodes [numnodes-1] = iter;
+            }
+        }
+
+        iter = iter->next;
+    }
+
+    /* make the selected edges */   
+    int i;
+    for(i = 0; i < numnodes; i++){
+        make_edge(g, nodes[i], n, scores[i]);
+    }
+
+    ckfree(nodes);
+    ckfree(scores);
+
+    /* now add this to the node list */ 
+    sladdhead(&g->node_list, n);
+}
+
+static void print_bin(bin* b)
+{
+    pre(b != NULL);
+
+    printf("\"%s\";\n", b->name);
+    node* n = b->val;
+
+    int i;
+    for(i = 0; i < n->num_edges; i++){
+        printf("\"%s\" -- \"%s\"\n", 
+              n->edges[i]->n1->name, n->edges[i]->n2->name);
+    }
+}
+
+/* print a graph in the GRAPHVIZ format */
+void print_graph(const graph* const g)
+{
+    pre(g != NULL);
+
+    printf("graph g {\n");
+    printf("node [shape = circle];\n");
+    func_hashtable(g->node_hash, print_bin);
+    printf("}\n");
+}
+
+/* a function which returns TRUE if all the nodes of the graph are visited */
+bool allnodes_visited(const graph* const g)
+{
+    pre(g != NULL);
+
+    node* iter;
+    for(iter = g->node_list; iter; iter = iter->next){
+        if(iter->visited == FALSE) return FALSE;
+    }
+    return TRUE;
+}
+
+/* does a node by this identifier exist in the graph */
+node* node_exists(const graph* const g, const char* const name)
+{
+    pre(g != NULL);
+    pre(name != NULL);
+
+    return find_value_hashtable(g->node_hash, name, strlen(name));
 }
 
 /* compare function  used to sort the items for Prims Algorithm*/
 static int compare(const void* const a, const void* const b)
 {
-	return (*((NODE**)b))->key - (*((NODE**)a))->key;
+    node* n1 = *((node**)a);
+    node* n2 = *((node**)b);
+
+    if(n2->key == n1->key){
+        seqread* r1 = n1->val;
+        seqread* r2 = n2->val;
+
+        return r1->s - r2->s;
+    }
+
+    return n2->key - n1->key;
 }
 
-/* find the node with the highest value of the key (it is the first element
- * in the list), remove it from the node list and node hash */
-static NODE* extract_max(GRAPH* const g, NODE** Q)
+/* sort the edges based on the weights */
+static int edgecomp(const void* const a, const void* const b)
 {
-	NODE* node = NULL;
-	if(slcount(*Q) > 1){
-		node = slpop(Q);
-	}else{
-		node = *Q;
-		*Q = NULL;
-	}
-	if(node == NULL){
-		fatal("Empty Q");
-	}
-
-	hash_remove_el(g->node_hash, node->name);
-
-	return node;
+    return (*((edge**)b))->weight - (*((edge**)a))->weight;
 }
 
-static NODE* pop_earliest(NODE** plist)
+/* extract the node with the highest key */
+static node* extract_max(node** nodes)
 {
-	NODE* list = *plist;
-	READ* seq = NULL;
-	NODE* iter = NULL;
-	NODE* min = NULL;
-	int min_index = INT_MAX;
-	int bt = 0;
+    node* n  = NULL;
 
-	for(iter = list; iter; iter = iter->next){
-		seq = iter->val;
-		sscanf(READ_HEAD(seq),"%*s %d %*d ", &bt);
-		if(bt < min_index){
-			min_index = bt;
-			min = iter;
-		}
-	}
+    if((*nodes)->next != NULL){
+        n = slpop(nodes);   
+    }else{
+        n = *nodes;
+        *nodes = NULL;
+    }
+    forceassert(n != NULL);
 
-	slremove(plist, min);
-	return min;
+    n->visited = TRUE;
+
+    return n;
 }
 
-/* find the maximum spanning tree for the graph. We progressively align the
- * nodes and return a list of contigs. The implementation is as per the
- * pseudocode in "Introduction to Algorithms". The implementation uses an array
- * right now. Changing it to Fibanacci heaps would lead to an improvement in
- * performance to O(E lg V).*/
-CONTIG* MST(GRAPH* const g, NODE* const root, INTERVAL** const pIntervals, FILE* const rf, int*** const pV, int** const pF, int*** const pI)
+static void updateQ(node** const pQ, const node* const u, const int updated)
 {
-	CONTIG* contig_list = NULL;
-	CONTIG* contig = new_contig();
-	NODE* list = NULL;
-	NODE* u1 = NULL;
-	NODE* u2 = NULL;
-	NODE* Q = g->node_list;
-	int i = 0, et = 0, bt = 0;
+    /* iterate through Q till you find 'updated' elements that are connected to
+     * 'u'. */
+    int numfound = 0;
 
-	/*lets set the key of the root to 0*/
-	root->key = 0;
-	slsort(&Q, compare);
+    node* iter = *pQ;
+    for(; iter; iter = iter->next){
+        if(edge_exists(u, iter)) numfound++;
+        if(numfound == updated) break;
+    }
+    
+    if(iter != NULL && iter->next != NULL && iter->next->next != NULL){
+        node* tmp1 = iter->next;
+        node* tmp2 = tmp1->next;
 
-	while(Q){
-		/* extract the next node */
-		u1 = extract_max(g, &Q);
-		/*is it a new contig?*/
-		if(u1->key == -1){
-			sladd_head(&Q, u1);
-			hash_add(g->node_hash, u1->name, u1);
-			u1 = pop_earliest(&Q);
-			sscanf(((READ*)u1->val)->header,"%*s %d %d ", &bt, &et);
-			sladd_head(&contig_list, contig);
-			contig = new_contig();
-#if DEBUG
-			fprintf(stderr, ">Contig: %s\n", READ_HEAD((READ*)u1->val));
+        tmp1->next = NULL;
+        slsort(pQ, compare);
+
+        if(tmp1->next == NULL) tmp1->next = tmp2;
+        else{
+            tmp1 = sllast(*pQ);
+            tmp1->next = tmp2;
+        }
+    }else{
+        slsort(pQ, compare);
+    }
+}
+
+#ifndef NDEBUG
+static bool issorted(const node* const list)
+{
+    const node* iter = list;
+    for(; iter && iter->next; iter = iter->next){
+        if(iter->key < iter->next->key){
+            return FALSE;
+        }
+    }
+    return TRUE;
+}
 #endif
-		}
-		/* add the returned node to a list, so that we can assign all the
-		 * nodes in the graph to node_list*/
-		sladd_head(&list, u1);
-		/* align this new node to the existing profile */
-		align_read(contig, u1->val, pIntervals, rf, pV, pF, pI);
 
-		for(i = 0; i < u1->num_edges; i++){
-			u2 = (u1->edges[i]->a == u1) ? u1->edges[i]->b : u1->edges[i]->a;
-			if(hash_lookup(g->node_hash, u2->name) && (u1->edges[i]->weight > u2->key)){
-				u2->key = u1->edges[i]->weight;
-			}
-		}
-		slsort(&Q, compare);
-	}
+/* find the maximum spanning tree for the given graph. Return a list of edges
+ * which form a part of that path. The variables used in this routine are from
+ * the Prim algorithm in "Introduction to Algorithms", by Thomas, Charles,
+ * Ronald.  */
+edge** find_maximum_spanning_tree(graph* const g, int* const numedges)
+{
+    pre(g != NULL);
+    
+    /* the path is empty initially*/
+    *numedges = 0;
+    edge** path = NULL; 
+    node* list  = NULL;
+    node* Q = g->node_list;
+    
+    /* set the key of the first node to be the maximum */
+    Q->key = 0;
 
-	g->node_list = list;
-	sladd_head(&contig_list, contig);
+    int i, updated;
+    node* t;
+    node* u;
+    node* v = NULL;
+    while(Q){
+        /* extract the next node */
+        u = extract_max(&Q);
+        sladdhead(&list, u);
 
-	return contig_list;
+        /* is there a path we can add to the spanning tree ? */
+        qsort(u->edges, u->num_edges, sizeof(edge*), edgecomp);
+        for(i = 0; i < u->num_edges; i++){
+            t = u->edges[i]->n1 == u ? u->edges[i]->n2 : u->edges[i]->n1;
+            if(t->visited == TRUE){ 
+                *numedges += 1;
+                path = ckrealloc(path, (*numedges) * sizeof(edge*));
+                path[(*numedges) - 1] = u->edges[i];
+                break;
+            }
+        }
+
+        updated = 0;
+        for(i = 0; i < u->num_edges; i++){  
+            v = u->edges[i]->n1 == u ? u->edges[i]->n2 : u->edges[i]->n1;
+
+            if(v->visited == FALSE){
+                updated++;
+                if(u->edges[i]->weight > v->key){
+                    v->key = u->edges[i]->weight;
+                }
+            }
+        }
+
+        if(u->num_edges > 0) updateQ(&Q, u, updated);
+        assert(issorted(Q));
+        v = u;
+    }
+
+    g->node_list = list;
+
+    return path;
+}
+
+
+/* free the resources held by this graph */
+void free_graph(graph** pg)
+{
+    graph* g = *pg;
+    
+    free_hashtable(&g->node_hash);
+
+    node* iter = g->node_list;
+    for(; iter; iter = iter->next){
+        ckfree(iter->edges);
+    }
+
+    slfreelist(&g->node_list);  
+    slfreelist(&g->edge_list);
+
+    ckfree(g);
+}
+
+/* count and return the number of singleton nodes in this graph */
+uint countsingletons(const graph* const g)
+{
+    pre(g != NULL);
+
+    uint count = 0;
+    node* iter = g->node_list;
+    for(; iter; iter = iter->next){
+        if(iter->num_edges == 0) count++;    
+    }
+
+    return count;
 }

@@ -1,0 +1,77 @@
+#!/usr/bin/env python
+
+from sys import argv, stderr
+from commands import getstatusoutput
+
+from fasta import *
+
+def inspectassembly(assemblyfile, hitsfile):
+    numcontigs = 0
+    numbases   = 0
+    numreads   = 0
+
+    records = fastafile(assemblyfile)
+
+    for r in records:
+        numcontigs += 1
+        numbases   += len(r.sequence)
+
+    records.close()
+
+    file = open(hitsfile, "r")
+
+    for line in file:
+        numreads += 1
+
+    file.close()
+    return numcontigs, numbases, numreads
+
+
+# get the current number of contigs, bases and reads used
+assemblyfile = argv[1]
+hitsfile     = argv[2]
+origref      = argv[3]
+
+numcontigs,numbases,numreads = inspectassembly(assemblyfile, hitsfile)
+
+W = 1
+X = 2
+
+while True:
+    cmd = "make stepx W=%d X=%d" % (W,X)
+    (status, output) = getstatusoutput(cmd)
+    print >> stderr, output
+
+    assemblyfile = "Assembly%d" % X
+    hitsfile     = "hits_template%d" % X
+    newnumcontigs,newnumbases,newnumreads = \
+    inspectassembly(assemblyfile,hitsfile)
+    print >> stderr, "Iteration %d: Contigs: %d, Bases: %d, Reads: %d" % \
+    (W, newnumcontigs, newnumbases, newnumreads)
+
+    if newnumcontigs >= numcontigs or \
+       newnumreads <= numreads     or \
+       (newnumcontigs == numcontigs and newnumbases < numbases):
+        assert W == X - 1
+        if W == 1:
+            print >> stderr, "This assembly does not benefit from the recursive process. Please run \"make single_step\" instead."
+            cmd = "mv Assembly1 Final_Assembly"
+            (status, output) = getstatusoutput(cmd)
+
+            cmd = "rm Assembly* hits* template[0-9]*"
+            (status, output) = getstatusoutput(cmd)
+        
+            exit(1)
+        else:
+            cmd = "cp template%d template" % W
+        print >> stderr, "Completing genome walk"
+        (status, output) = getstatusoutput(cmd)
+        break
+
+    numcontigs = newnumcontigs
+    numbases   = newnumbases
+    numreads   = newnumreads
+
+    W += 1
+    X += 1
+

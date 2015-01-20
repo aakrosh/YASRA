@@ -9,14 +9,15 @@
 * min=40 -- discard contigs with less than 40 bp
 */
 
-#include "util.h"
-#include "seq.h"
+#include "utilities.h"
+#include "sequences.h"
 
 #define MIN_CONTIG_LEN 150
 
 int Ns=1000, cur_pos;
 
-void put_Ns() {
+static void put_Ns() 
+{
 	int i;
 
 	for (i = 0; i < Ns; ++i)
@@ -25,8 +26,9 @@ void put_Ns() {
 	cur_pos += Ns;
 }
 
-int main(int argc, char **argv) {
-	SEQ *sf;
+int main(int argc, char **argv) 
+{
+	sequence *sf;
 	FILE *fp = NULL;
 	char *p;
 	int k, n, ends = 1, min_len = MIN_CONTIG_LEN;
@@ -47,21 +49,21 @@ int main(int argc, char **argv) {
 	}
 	if (argc != 2)
 		fatal("arg: contigs.fa [noends] [N=?] [info=filename] [min=?]");
-	sf = seq_open(argv[1]);
+	sf = open_fasta_sequence(argv[1]);
 	printf("> make_template\n");
-	for (n = 0; seq_read(sf); n = 1)
-		if ((k = SEQ_LEN(sf)) >= min_len) {
+	for (n = 0; get_next_sequence(sf); n = 1)
+		if ((k = sf->slen) >= min_len) {
 			if (ends || n > 0)
 				put_Ns();
 			if (fp != NULL)
 				fprintf(fp, "Contig%d %d %d\n",
 				  n, cur_pos, cur_pos + k);
 			cur_pos += k;
-			printf("%s\n", SEQ_CHARS(sf));
+			printf("%s\n", sf->sequence);
 		}
 	if (ends)
 		put_Ns();
 	if (fp != NULL)
 		fclose(fp);
-	return 0;
+	return EXIT_SUCCESS;
 }

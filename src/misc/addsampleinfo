@@ -1,0 +1,170 @@
+#!/usr/bin/env python
+
+"""
+Take a SAM file, and add the sample information to it. The resulting file should
+look like this:
+
+@HD VN:1.3  SO:unsorted
+@RG ID:c    SM:cedric
+HWUSI-EAS610_00010:4:44:6708:11478#0/2  0   Contig1_858_1041    1   255 80M *
+0   0
+TAAATAAATAAAATTATTACCAATAATATATTGGTGTTAAATGAGTTTTTATGATAGCAGAGAATAATTTGTCATCATCA
+IHHIHIIIIIIIHIIGIIIHHIIHIHEHIGGGGGBIIIIIIIIIIBIIIIIIIFIIHIHFIIHIGDHFHCIEBBEFHCEH
+RG:Z:c
+
+"""
+
+from sys import argv, stderr, exit
+from getopt import getopt, GetoptError
+
+__author__ = "Aakrosh Ratan"
+__email__  = "ratan@bx.psu.edu"
+
+# do we want the debug information to be printed?
+debug_flag = False
+
+def mainlong(ids, samfile):
+     # a dictionary which holds the mapping of the prefixes to the sample name
+    dict = {}
+
+    sf  = open(samfile, "r")
+
+    line = sf.readline()
+    while line:
+        if line.startswith("@"):
+            print line,
+            line = sf.readline()
+            continue
+        break
+
+    # now add the header information for all the samples
+    for info in ids:
+        name,prefixes = info.split("=")
+        print "@RG\tID:%s\tSM:%s" % (name, name)
+        for prefix in prefixes.split(","):
+            dict[prefix] = name
+
+    if len(dict) == 1 and dict.keys()[0] == "ALL":
+        while line:
+            print "%s\tRG:Z:%s" % (line[:-1], dict["ALL"])
+            line = sf.readline()
+   
+    # add all the other information to the file
+    while line:
+        tokens = line.split("\t")
+        readnametokens = tokens[0]
+        name = readnametokens[:9]
+        
+        if name in dict:
+            print "%s\tRG:Z:%s" % (line[:-1], dict[name])
+        else:
+            print "%s\tRG:Z:%s" % (line[:-1], dict["ALL"])
+
+        line = sf.readline()
+
+    sf.close()
+
+def mainshort(ids, samfile, multiplexed, noindex):
+    # a dictionary which holds the mapping of the prefixes to the sample name
+    dict = {}
+
+    sf  = open(samfile, "r")
+
+    line = sf.readline()
+    while line:
+        if line.startswith("@"):
+            print line,
+            line = sf.readline()
+            continue
+        break
+
+    # now add the header information for all the samples
+    for info in ids:
+        name,prefixes = info.split("=")
+        print "@RG\tID:%s\tSM:%s" % (name, name)
+        for prefix in prefixes.split(","):
+            dict[prefix] = name
+
+    if len(dict) == 1 and dict.keys()[0] == "ALL":
+        while line:
+            print "%s\tRG:Z:%s" % (line[:-1], dict["ALL"])
+            line = sf.readline()
+            
+    # add all the other information to the file
+    while line:
+        if line.startswith("@"): 
+            print >> stderr, "Additional comment line in the middle of file"
+        else:     
+            tokens = line.split("\t")
+
+            if multiplexed == False:
+                readnametokens = tokens[0].split(":")
+                name = "%s:%s" % (readnametokens[0],readnametokens[1])
+        
+            else:
+                readnametokens = tokens[0].split(":")
+                mplexedtokens  = readnametokens[4].split("#")
+                if noindex == False:
+                    name = "%s:%s" % (readnametokens[0],mplexedtokens[1][:-2])
+                else:
+                    name = "%s:%s" % (readnametokens[0],mplexedtokens[1])
+
+            if name in dict:
+                print "%s\tRG:Z:%s" % (line[:-1], dict[name])
+            else:
+                print >> stderr, name
+                print "%s\tRG:Z:%s" % (line[:-1], dict["ALL"])
+
+        line = sf.readline()
+
+    sf.close()
+
+def usage():
+    f = stderr
+    print >> f, "usage:"
+    print >> f, "addsampleinfo [options] sam1=string11,string21,... sam2=string12,... ... alignment.sam" 
+    print >> f, "where the options are:"
+    print >> f, "-h,--help : print usage and quit"
+    print >> f, "-d,--debug: print debug information"
+    print >> f, "-f,--fourfivefour : the reads were sequenced using 454"
+    print >> f, "-m,--multiplexed  : Illumina multiplexed reads"
+    print >> f, "-n,--noindex      : does the name include \"/1\" or \"/2\""
+    print >> f, "                    by default, the name is expected to "
+    print >> f, "                    contain these indexes"
+
+if __name__ == "__main__":
+    try:
+        opts, args = getopt(argv[1:], "hdfmn",\
+                    ["help", "debug", "fourfivefour", "multiplexed", "noindex"])
+    except GetoptError, err:
+        print str(err)
+        usage()
+        exit(2) 
+
+    fourfivefour = False
+    multiplexed  = False
+    noindex      = False
+
+    for o, a in opts:
+        if o in ("-h", "--help"):
+            usage()
+            exit()
+        elif o in ("-d", "--debug"):
+            debug_flag = True
+        elif o in ("-f", "--fourfivefour"):
+            fourfivefour = True
+        elif o in ("-m", "--multiplexed"):
+            multiplexed = True
+        elif o in ("-n", "--noindex"):
+            noindex = True
+        else:
+            assert False, "unhandled option"
+
+    if len(args) < 1:
+        usage()
+        exit(3)
+
+    if fourfivefour == False:
+        mainshort(args[:-1], args[-1], multiplexed, noindex)
+    else:
+        mainlong(args[:-1], args[-1])

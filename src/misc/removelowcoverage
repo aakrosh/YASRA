@@ -1,0 +1,137 @@
+#!/usr/bin/env python
+
+"""
+Input: A fasta reference file
+       A hits file
+       A coverage threshold
+
+Output: A hits file that does not have the reads that lie in regions with
+coverage > specified threshold
+"""
+
+from sys import argv, stderr, exit
+from getopt import getopt, GetoptError
+from array import array
+
+from fasta import *
+
+__author__ = "Aakrosh Ratan"
+__email__  = "ratan@bx.psu.edu"
+
+# do we want the debug information to be printed?
+debug_flag = False
+
+def readreference(filename):
+    records = fastafile(filename)
+    reference = {}
+
+    for entry in records:
+        reference[entry.header.split()[0]] = array('I',[0]*len(entry.sequence))
+        print >> stderr, "Reference length: %d" % len(entry.sequence)
+
+    records.close() 
+    return reference
+
+def addcoverageinfo(reference, hitsname):
+    file =  open(hitsname, "r")
+
+    for line in file:
+        if line.startswith("#"): continue
+
+        tokens = line.strip().split()
+
+        name1   = tokens[0]
+        zstart1 = int(tokens[1])
+        end1    = int(tokens[2])
+
+        ref = reference[name1]
+
+        for i in range(zstart1, end1):
+            try:
+                ref[i] += 1
+            except IndexError:
+                reference[name1].extend([0] * (i - len(ref) + 1))
+                ref = reference[name1]
+                ref[i] += 1
+
+    file.close()
+
+def main(refname, hitsname, mincoverage):
+    reference = readreference(refname)
+    print >> stderr, "Read the reference sequence"
+
+    addcoverageinfo(reference, hitsname)
+    print >> stderr, "Added the coverage information"
+
+    locations = {}
+    for k in reference.keys():
+        locations[k] = {}
+
+    for k,v in reference.items():
+        for i in range(0, len(v)):
+            if v[i] < mincoverage: 
+                locations[k][i] = 1
+
+    # read the hits file again and only output a hit if it does not cover the
+    # location with more than the expected covergae
+    file = open(hitsname, "r")
+    removed = 0
+
+    for line in file:
+        if line.startswith("#"): continue
+
+        tokens = line.strip().split()
+
+        name1 = tokens[0]
+        start = int(tokens[1])
+        stop  = int(tokens[2])
+
+        toprint = True
+        for i in range(start,stop):
+            if i in locations[name1]: 
+                toprint = False
+                removed += 1
+                break
+
+        if toprint == True:
+            print line,
+
+    file.close()
+    print >> stderr, "Removed %d reads from consideration" % removed
+
+def usage():
+    f = stderr
+    print >> f, "usage:"
+    print >> f, "removelowcoverage [options] reference.fa hits.txt"
+    print >> f, "where the options are:"
+    print >> f, "-h,--help : print usage and quit"
+    print >> f, "-d,--debug: print debug information"
+    print >> f, "-t,--threshold: the coverage threshold (hits to regions with"
+    print >> f, "                coverage < threshold will be removed)"
+
+if __name__ == "__main__":
+    try:
+        opts, args = getopt(argv[1:], "hdt:",["help", "debug","threshold="])
+    except GetoptError, err:
+        print str(err)
+        usage()
+        exit(2) 
+
+    threshold = 2
+
+    for o, a in opts:
+        if o in ("-h", "--help"):
+            usage()
+            exit()
+        elif o in ("-d", "--debug"):
+            debug_flag = True
+        elif o in ("-t", "--threshold"):
+            threshold = int(a)
+        else:
+            assert False, "unhandled option"
+
+    if len(args) != 2:
+        usage()
+        exit(3)
+
+    main(args[0], args[1], threshold)
