@@ -86,6 +86,7 @@ the contig refers to the next contig in the assembly list.
 
 Contig: is formed of columns, which are in a list.
 
+```
 ------------------->
 
 .-----------.-----------.-----------.----------.----------.----------.
@@ -104,6 +105,7 @@ Contig: is formed of columns, which are in a list.
 |    C      |     G     |     C     |
 |    C      |     C     |     C     |
 '-----------'-----------'-----------'
+```
 
 Each base in a column is called an element.
 
